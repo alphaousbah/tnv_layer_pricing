@@ -81,16 +81,19 @@ def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
             df_reinst["deduct"].to_numpy(),
             df_reinst["limit_after_agg_limit"].to_numpy(),
         )
-        paid_premium = expected_annual_loss / df_by_year["reinst_factor"].mean()
+        paid_premium = expected_annual_loss / (df_by_year["reinst_factor"].sum() / SIMULATED_YEARS)
         print(f"{paid_premium=}")
 
         (
             df["reinstated"],
             df["reinst_premium"],
         ) = get_occ_reinstatements(
+            df["year"].to_numpy(),
             df["cumulative_ceded"].to_numpy(),
             layer.occ_limit,
             df_reinst["rate"].to_numpy(),
+            df_reinst["deduct"].to_numpy(),
+            df_reinst["limit_after_agg_limit"].to_numpy(),
             paid_premium,
         )
 
@@ -100,7 +103,7 @@ def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
 
     end = perf_counter()
     print(f"Elapsed time: {end - start}")
-    # print(df)
+    print(df)
     return df
 
 
@@ -130,12 +133,12 @@ def get_df_reinst(layer_id):
 # See the Custom Function Example section
 @njit
 def get_occ_recoveries(
-        year,
-        gross,
-        occ_limit,
-        occ_deduct,
-        agg_limit,
-        agg_deduct,
+    year,
+    gross,
+    occ_limit,
+    occ_deduct,
+    agg_limit,
+    agg_deduct,
 ):
     n = len(gross)  # n = loss count
 
@@ -215,50 +218,82 @@ def get_reinst_limits(reinst_number, agg_limit, occ_limit):
 
 @njit
 def get_reinst_factors(
-        ceded_by_year, occ_limit, reinst_rate, reinst_deduct, reinst_limit
+    ceded_by_year, occ_limit, reinst_rate, reinst_deduct, reinst_limit
 ):
     years_count = len(ceded_by_year)
     reinst_count = len(reinst_rate)
 
     # Initialize the temporary variable
-    additional_premium
+    additional_premium = np.empty((years_count, reinst_count), dtype="float64")
 
     # Initialize the output variable reinst_factor
     reinst_factor = np.empty(years_count, dtype="float64")
 
     for i in range(years_count):
-        reinst_factor[i] = 1
-
         for j in range(reinst_count):
-            reinst_factor[i] = reinst_factor[i] + (
-                    min(reinst_limit[j], max(0, ceded_by_year[i] - reinst_deduct[j]))
-                    * reinst_rate[j]
-                    / occ_limit
+            additional_premium[i, j] = (
+                min(reinst_limit[j], max(0, ceded_by_year[i] - reinst_deduct[j]))
+                * reinst_rate[j]
+                / occ_limit
             )
+        reinst_factor[i] = 1 + additional_premium[i].sum()
 
     return reinst_factor
 
 
 @njit
-def get_occ_reinstatements(cumulative_ceded, occ_limit, reinst_rate, paid_premium):
+def get_occ_reinstatements(
+    year,
+    cumulative_ceded,
+    occ_limit,
+    reinst_rate,
+    reinst_deduct,
+    reinst_limit,
+    paid_premium,
+):
     loss_count = len(cumulative_ceded)
     reinst_count = len(reinst_rate)
 
     # Initialize the temporary variables. dtype="float64" is suitable here
     reinst_limit_before_occ = np.empty((loss_count, reinst_count), dtype="float64")
     reinst_deduct_before_occ = np.empty((loss_count, reinst_count), dtype="float64")
-    amount_reinstated = np.empty((loss_count, reinst_count), dtype="float64")
+    reinstated_occ = np.empty((loss_count, reinst_count), dtype="float64")
     reinst_limit_after_occ = np.empty((loss_count, reinst_count), dtype="float64")
     reins_deduct_after_occ = np.empty((loss_count, reinst_count), dtype="float64")
+    reinst_premium_occ = np.empty((loss_count, reinst_count), dtype="float64")
 
     # Initialize the output variables
     reinstated = np.empty(loss_count, dtype="int64")
     reinst_premium = np.empty(loss_count, dtype="int64")
 
     for i in range(loss_count):
-
-
         for j in range(reinst_count):
-
+            reinst_limit_before_occ[i, j] = (
+                reinst_limit[j]
+                if (i == 0 or year[i] != year[i - 1])
+                else reinst_limit_after_occ[i - 1, j]
+            )
+            reinst_deduct_before_occ[i, j] = (
+                reinst_deduct[j]
+                if (i == 0 or year[i] != year[i - 1])
+                else reins_deduct_after_occ[i - 1, j]
+            )
+            reinstated_occ[i, j] = min(
+                reinst_limit_before_occ[i, j],
+                max(0, cumulative_ceded[i] - reinst_deduct_before_occ[i, j]),
+            )
+            reinst_limit_after_occ[i, j] = max(
+                0, reinst_limit_before_occ[i, j] - reinstated_occ[i, j]
+            )
+            reins_deduct_after_occ[i, j] = (
+                reinst_deduct_before_occ[i, j] + reinstated_occ[i, j]
+                if (i == 0 or year[i] != year[i - 1])
+                else reins_deduct_after_occ[i - 1, j] + reinstated_occ[i, j]
+            )
+            reinst_premium_occ[i, j] = (
+                reinstated_occ[i, j] / occ_limit * reinst_rate[j] * paid_premium
+            )
+        reinstated[i] = reinstated_occ[i].sum()
+        reinst_premium[i] = reinst_premium_occ[i].sum()
 
     return reinstated, reinst_premium
