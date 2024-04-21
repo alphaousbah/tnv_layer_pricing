@@ -1,5 +1,3 @@
-from time import perf_counter
-
 import numpy as np
 import pandas as pd
 from numba import njit
@@ -8,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from database import Layer, LayerReinstatement, ModelYearLoss, engine
 
-SIMULATED_YEARS = 2  # TODO: Change to 10000 for TNV
+SIMULATED_YEARS = 1  # TODO: Change to 10000 for TNV
 pd.set_option("display.max_columns", None)
 pd.options.mode.copy_on_write = True
 
@@ -18,12 +16,7 @@ def get_df_layeryearloss(df_layer_modelfile):
 
     layer_ids = sorted(df_layer_modelfile["layer_id"].unique())
     for layer_id in layer_ids:
-        # modelfile_ids = IDs of model files linked to the current layer
-        modelfile_ids = sorted(
-            df_layer_modelfile[df_layer_modelfile["layer_id"] == layer_id][
-                "modelfile_id"
-            ]
-        )
+        modelfile_ids = get_linked_modelfiles(layer_id, df_layer_modelfile)
         df_layer = get_df_layeryearloss_single_layer(layer_id, modelfile_ids)
         df = pd.concat([df, df_layer], ignore_index=True)
 
@@ -32,7 +25,6 @@ def get_df_layeryearloss(df_layer_modelfile):
 
 def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
     df = pd.DataFrame([])  # Initialize df_layeryearloss_single_layer
-    start = perf_counter()
     layer = get_layer(int(layer_id))
 
     for modelfile_id in modelfiles_ids:
@@ -105,10 +97,26 @@ def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
         df["reinstated"] = 0
         df["reinst_premium"] = 0
 
-    end = perf_counter()
-    print(f"Elapsed time: {end - start}")
-    # print(df)
+    df = df[
+        [
+            "year",
+            "day",
+            "gross",
+            "ceded",
+            "net",
+            "reinstated",
+            "reinst_premium",
+            "loss_type",
+        ]
+    ]
+
     return df
+
+
+def get_linked_modelfiles(layer_id, df_layer_modelfile):
+    return sorted(
+        df_layer_modelfile[df_layer_modelfile["layer_id"] == layer_id]["modelfile_id"]
+    )
 
 
 def get_layer(layer_id):

@@ -2,12 +2,14 @@
 # https://raaviblog.com/python-2-7-read-and-write-excel-file-with-win32com/
 # https://learn.microsoft.com/en-us/dotnet/api/microsoft.office.interop.excel.listobject?view=excel-pia
 
+from time import perf_counter
+
 import win32api
 from sqlalchemy.orm import Session
 from win32com import client
 
 from database import Layer, LayerReinstatement, ModelFile, ModelYearLoss, engine
-from engine import get_df_layeryearloss
+from engine.pricing.function_layeryearloss import get_df_layeryearloss
 from utils import df_from_listobject
 
 # --------------------------------------
@@ -61,8 +63,8 @@ with Session(engine) as session:
         modelyearloss = ModelYearLoss(
             year=row["year"],
             day=row["day"],
-            loss_type=row["loss_type"],
             loss=row["loss"],
+            loss_type=row["loss_type"],
             modelfile_id=row["modelfile_id"],
         )
         session.add(modelyearloss)
@@ -81,8 +83,10 @@ df_layer_modelfile = df_from_listobject(
 # Step 3: Get the output data
 # --------------------------------------
 
-df_layeryearlosses = get_df_layeryearloss(df_layer_modelfile)
-print(df_layeryearlosses)
+start = perf_counter()
+df = get_df_layeryearloss(df_layer_modelfile)
+end = perf_counter()
+print(f"Elapsed time: {end - start}")
 
 # --------------------------------------
 # Step 4: Save in the database
@@ -101,13 +105,7 @@ with Session(engine) as session:
 
 # Define the output worksheet and table
 ws_output = wb.Worksheets("Output")
-
-
-"""
-table_output = ws_output.ListObjects("layers_output")
-wb.Worksheets("Output").Range("output_1").Value = "Success!"
-ws_output.Select()
-# win32api.MessageBox(0, "Success!", "Title")
+table_output = ws_output.ListObjects("LayerYearLoss")
 
 # Clear the output table
 if table_output.DataBodyRange is None:
@@ -115,15 +113,18 @@ if table_output.DataBodyRange is None:
 else:
     table_output.DataBodyRange.Delete()
 
-# Define the range for writing the output data
+
+# Define the range for writing the output data, then write
 cell_start = table_output.Range.Cells(2, 1)
 cell_end = table_output.Range.Cells(2, 1).Offset(len(df), len(df.columns))
-
-# Write the output data
 ws_output.Range(cell_start, cell_end).Value = df.values
-"""
+
+ws_output.Select()
+win32api.MessageBox(0, "Done", "Python")
 
 """
+
+ws_output.Select()
 
 Other useful commands:
 
