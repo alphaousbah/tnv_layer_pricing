@@ -73,22 +73,23 @@ with Session(engine) as session:
 # --------------------------------------
 
 # Read the input data
-df_layer_modelfile_table = df_from_listobject(
-    wb.Worksheets("Input").ListObjects("layer_modelfile_table")
+df_layer_modelfile = df_from_listobject(
+    wb.Worksheets("Input").ListObjects("layer_modelfile")
 )
 
 # --------------------------------------
 # Step 3: Get the output data
 # --------------------------------------
 
-df_layeryearlosses = get_df_layeryearloss(df_layer_modelfile_table)
+df_layeryearlosses = get_df_layeryearloss(df_layer_modelfile)
+print(df_layeryearlosses)
 
 # --------------------------------------
 # Step 4: Save in the database
 # --------------------------------------
 
 with Session(engine) as session:
-    for _, row in df_layer_modelfile_table.iterrows():
+    for _, row in df_layer_modelfile.iterrows():
         layer = session.get(Layer, row["layer_id"])
         modelfile = session.get(ModelFile, row["modelfile_id"])
         layer.modelfiles.append(modelfile)
@@ -101,12 +102,12 @@ with Session(engine) as session:
 # Define the output worksheet and table
 ws_output = wb.Worksheets("Output")
 
-wb.Worksheets("Output").Range("output_1").Value = "Success!"
-# ws_output.Select()
-# win32api.MessageBox(0, "Success!", "Title")
 
 """
 table_output = ws_output.ListObjects("layers_output")
+wb.Worksheets("Output").Range("output_1").Value = "Success!"
+ws_output.Select()
+# win32api.MessageBox(0, "Success!", "Title")
 
 # Clear the output table
 if table_output.DataBodyRange is None:

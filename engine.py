@@ -8,34 +8,36 @@ from sqlalchemy.orm import Session
 
 from database import Layer, LayerReinstatement, ModelYearLoss, engine
 
-SIMULATED_YEARS = 2  # TODO: Change to 10000
+SIMULATED_YEARS = 2  # TODO: Change to 10000 for TNV
 pd.set_option("display.max_columns", None)
 pd.options.mode.copy_on_write = True
 
 
-def get_df_layeryearloss(df_layer_modelfile_table):
-    df = pd.DataFrame([])  # Initialize df_layeryearlosses
+def get_df_layeryearloss(df_layer_modelfile):
+    df = pd.DataFrame([])  # Initialize df_layeryearloss
 
-    layer_ids = sorted(df_layer_modelfile_table["layer_id"].unique())
+    layer_ids = sorted(df_layer_modelfile["layer_id"].unique())
     for layer_id in layer_ids:
-        linked_modelfiles_ids = sorted(
-            df_layer_modelfile_table[df_layer_modelfile_table["layer_id"] == layer_id][
+        # modelfile_ids = IDs of model files linked to the current layer
+        modelfile_ids = sorted(
+            df_layer_modelfile[df_layer_modelfile["layer_id"] == layer_id][
                 "modelfile_id"
-            ].astype(int)
+            ]
         )
-        df_layer = get_df_layeryearloss_single_layer(layer_id, linked_modelfiles_ids)
+        df_layer = get_df_layeryearloss_single_layer(layer_id, modelfile_ids)
+        df = pd.concat([df, df_layer], ignore_index=True)
 
     return df
 
 
 def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
+    df = pd.DataFrame([])  # Initialize df_layeryearloss_single_layer
     start = perf_counter()
-    layer = get_layer(layer_id)
-    df = pd.DataFrame([])  # Initialize df_layeryearlosses_single_layer
+    layer = get_layer(int(layer_id))
 
     for modelfile_id in modelfiles_ids:
-        df_modelyearlosses = get_df_modelyearlosses(modelfile_id)
-        df = pd.concat([df, df_modelyearlosses], ignore_index=True)
+        df_modelyearloss = get_df_modelyearloss(modelfile_id)
+        df = pd.concat([df, df_modelyearloss], ignore_index=True)
 
     df = df.sort_values(["year", "day"])
 
@@ -62,7 +64,6 @@ def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
     # Process reinstatements
     df_by_year = df[["year", "gross", "ceded", "net"]].groupby(by="year").sum()
     expected_annual_loss = df_by_year["ceded"].sum() / SIMULATED_YEARS
-    print(f"{expected_annual_loss=}")
 
     df_reinst = get_df_reinst(layer_id)
     if not df_reinst.empty:
@@ -74,16 +75,19 @@ def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
             df_reinst["number"].to_numpy(), layer.agg_limit, layer.occ_limit
         )
 
-        df_by_year["reinst_factor"] = get_reinst_factors(
+        df_by_year["additional_premium"] = get_additional_premiums(
             df_by_year["ceded"].to_numpy(),
             layer.occ_limit,
             df_reinst["rate"].to_numpy(),
             df_reinst["deduct"].to_numpy(),
             df_reinst["limit_after_agg_limit"].to_numpy(),
         )
-        paid_premium = expected_annual_loss / (df_by_year["reinst_factor"].sum() / SIMULATED_YEARS)
-        print(f"{paid_premium=}")
 
+        paid_premium = expected_annual_loss / (
+            1 + df_by_year["additional_premium"].sum() / SIMULATED_YEARS
+        )
+
+        # Finally
         (
             df["reinstated"],
             df["reinst_premium"],
@@ -103,15 +107,15 @@ def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
 
     end = perf_counter()
     print(f"Elapsed time: {end - start}")
-    print(df)
+    # print(df)
     return df
 
 
 def get_layer(layer_id):
-    return Session(engine).get(Layer, int(layer_id))
+    return Session(engine).get(Layer, layer_id)
 
 
-def get_df_modelyearlosses(modelfile_id):
+def get_df_modelyearloss(modelfile_id):
     query = select(ModelYearLoss).filter_by(modelfile_id=modelfile_id)
     df = pd.read_sql_query(query, engine)
     df = df.drop(columns="id")
@@ -122,8 +126,7 @@ def get_df_modelyearlosses(modelfile_id):
 def get_df_reinst(layer_id):
     query = select(LayerReinstatement).filter_by(layer_id=layer_id)
     df = pd.read_sql_query(query, engine)
-    df = df.drop(columns="id")
-    df = df.drop(columns=["layer_id"])
+    df = df.drop(columns=["id", "layer_id"])
     df = df.sort_values("order")
     return df
 
@@ -143,15 +146,15 @@ def get_occ_recoveries(
     n = len(gross)  # n = loss count
 
     # Initialize output arrays
-    occ_recov_before_agg_deduct = np.empty(n, dtype="int64")
-    agg_deduct_before_occ = np.empty(n, dtype="int64")
-    occ_recov_after_agg_deduct = np.empty(n, dtype="int64")
-    agg_deduct_after_occ = np.empty(n, dtype="int64")
-    agg_limit_before_occ = np.empty(n, dtype="int64")
-    ceded = np.empty(n, dtype="int64")
-    cumulative_ceded = np.empty(n, dtype="int64")
-    agg_limit_after_occ = np.empty(n, dtype="int64")
-    net = np.empty(n, dtype="int64")
+    occ_recov_before_agg_deduct = np.empty(n, dtype="float64")
+    agg_deduct_before_occ = np.empty(n, dtype="float64")
+    occ_recov_after_agg_deduct = np.empty(n, dtype="float64")
+    agg_deduct_after_occ = np.empty(n, dtype="float64")
+    agg_limit_before_occ = np.empty(n, dtype="float64")
+    ceded = np.empty(n, dtype="float64")
+    cumulative_ceded = np.empty(n, dtype="float64")
+    agg_limit_after_occ = np.empty(n, dtype="float64")
+    net = np.empty(n, dtype="float64")
 
     for i in range(n):
         occ_recov_before_agg_deduct[i] = min(occ_limit, max(0, gross[i] - occ_deduct))
@@ -197,9 +200,9 @@ def get_occ_recoveries(
 def get_reinst_limits(reinst_number, agg_limit, occ_limit):
     n = len(reinst_number)  # n = reinstatement count
 
-    reinst_limit_before_agg_limit = np.empty(n, dtype="int64")
-    reinst_deduct = np.empty(n, dtype="int64")
-    reinst_limit_after_agg_limit = np.empty(n, dtype="int64")
+    reinst_limit_before_agg_limit = np.empty(n, dtype="float64")
+    reinst_deduct = np.empty(n, dtype="float64")
+    reinst_limit_after_agg_limit = np.empty(n, dtype="float64")
 
     for i in range(n):
         reinst_limit_before_agg_limit[i] = reinst_number[i] * occ_limit
@@ -217,28 +220,25 @@ def get_reinst_limits(reinst_number, agg_limit, occ_limit):
 
 
 @njit
-def get_reinst_factors(
+def get_additional_premiums(
     ceded_by_year, occ_limit, reinst_rate, reinst_deduct, reinst_limit
 ):
     years_count = len(ceded_by_year)
     reinst_count = len(reinst_rate)
 
-    # Initialize the temporary variable
-    additional_premium = np.empty((years_count, reinst_count), dtype="float64")
-
-    # Initialize the output variable reinst_factor
-    reinst_factor = np.empty(years_count, dtype="float64")
+    additional_premium_reinst = np.empty((years_count, reinst_count), dtype="float64")
+    additional_premium = np.empty(years_count, dtype="float64")
 
     for i in range(years_count):
         for j in range(reinst_count):
-            additional_premium[i, j] = (
+            additional_premium_reinst[i, j] = (
                 min(reinst_limit[j], max(0, ceded_by_year[i] - reinst_deduct[j]))
                 * reinst_rate[j]
                 / occ_limit
             )
-        reinst_factor[i] = 1 + additional_premium[i].sum()
+        additional_premium[i] = additional_premium_reinst[i].sum()
 
-    return reinst_factor
+    return additional_premium
 
 
 @njit
@@ -254,7 +254,6 @@ def get_occ_reinstatements(
     loss_count = len(cumulative_ceded)
     reinst_count = len(reinst_rate)
 
-    # Initialize the temporary variables. dtype="float64" is suitable here
     reinst_limit_before_occ = np.empty((loss_count, reinst_count), dtype="float64")
     reinst_deduct_before_occ = np.empty((loss_count, reinst_count), dtype="float64")
     reinstated_occ = np.empty((loss_count, reinst_count), dtype="float64")
@@ -262,9 +261,8 @@ def get_occ_reinstatements(
     reins_deduct_after_occ = np.empty((loss_count, reinst_count), dtype="float64")
     reinst_premium_occ = np.empty((loss_count, reinst_count), dtype="float64")
 
-    # Initialize the output variables
-    reinstated = np.empty(loss_count, dtype="int64")
-    reinst_premium = np.empty(loss_count, dtype="int64")
+    reinstated = np.empty(loss_count, dtype="float64")
+    reinst_premium = np.empty(loss_count, dtype="float64")
 
     for i in range(loss_count):
         for j in range(reinst_count):
