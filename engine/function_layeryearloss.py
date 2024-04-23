@@ -4,26 +4,26 @@ from numba import njit
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database import Layer, LayerReinstatement, ModelYearLoss, engine
+from db import Layer, LayerReinstatement, ModelYearLoss, engine
 
 SIMULATED_YEARS = 1  # TODO: Change to 10000 for TNV
 pd.set_option("display.max_columns", None)
 pd.options.mode.copy_on_write = True
 
 
-def get_df_layeryearloss(df_layer_modelfile):
+def get_df_layeryearloss_from_relationships(df_layer_modelfile):
     df = pd.DataFrame([])  # Initialize df_layeryearloss
 
     layer_ids = sorted(df_layer_modelfile["layer_id"].unique())
     for layer_id in layer_ids:
         modelfile_ids = get_linked_modelfiles(layer_id, df_layer_modelfile)
-        df_layer = get_df_layeryearloss_single_layer(layer_id, modelfile_ids)
+        df_layer = get_df_layeryearloss(layer_id, modelfile_ids)
         df = pd.concat([df, df_layer], ignore_index=True)
 
     return df
 
 
-def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
+def get_df_layeryearloss(layer_id, modelfiles_ids):
     df = pd.DataFrame([])  # Initialize df_layeryearloss_single_layer
     layer = get_layer(int(layer_id))
 
@@ -114,9 +114,9 @@ def get_df_layeryearloss_single_layer(layer_id, modelfiles_ids):
 
 
 def get_linked_modelfiles(layer_id, df_layer_modelfile):
-    return sorted(
-        df_layer_modelfile[df_layer_modelfile["layer_id"] == layer_id]["modelfile_id"]
-    )
+    return df_layer_modelfile[df_layer_modelfile["layer_id"] == layer_id][
+        "modelfile_id"
+    ]
 
 
 def get_layer(layer_id):

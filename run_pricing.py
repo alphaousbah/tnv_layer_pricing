@@ -8,8 +8,16 @@ import win32api
 from sqlalchemy.orm import Session
 from win32com import client
 
-from database import Layer, LayerReinstatement, ModelFile, ModelYearLoss, engine
-from engine.pricing.function_layeryearloss import get_df_layeryearloss
+from db import (
+    Layer,
+    LayerReinstatement,
+    ModelFile,
+    ModelYearLoss,
+    ResultInstance,
+    ResultLayer,
+    engine,
+)
+from engine.function_layeryearloss import get_df_layeryearloss
 from utils import df_from_listobject
 
 # --------------------------------------
@@ -71,7 +79,7 @@ with Session(engine) as session:
     session.commit()
 
 # --------------------------------------
-# Step 3: Process the input data
+# Step 3: Read the input data
 # --------------------------------------
 
 # Read the input data
@@ -80,11 +88,51 @@ df_layer_modelfile = df_from_listobject(
 )
 
 # --------------------------------------
-# Step 3: Get the output data
+# Step 4: Process
 # --------------------------------------
 
 start = perf_counter()
-df = get_df_layeryearloss(df_layer_modelfile)
+layer_ids = df_layer_modelfile["layer_id"].unique()
+
+with Session(engine) as session:
+    # Delete the previous relationships between layers and modelfiles
+    for layer_id in layer_ids:
+        layer = session.get(Layer, layer_id)
+        layer.modelfiles.clear()
+
+    # Create the new relationships between layers and modelfiles
+    for _, row in df_layer_modelfile.iterrows():
+        layer = session.get(Layer, row["layer_id"])
+        modelfile = session.get(ModelFile, row["modelfile_id"])
+        layer.modelfiles.append(modelfile)
+
+    # Calculate and save the layeryearlosses
+    for layer_id in layer_ids:
+        modelfiles_ids = [modelfile.id for modelfile in layer.modelfiles]
+        print(modelfiles_ids)
+        df = get_df_layeryearloss(layer_id, modelfiles_ids)
+
+        # TODO: Save
+
+    # Create a resultinstance
+    resultinstance = ResultInstance(name="Run 1")
+    session.add(resultinstance)
+
+    # Create the resultlayers
+    for layer_id in layer_ids:
+        layer = session.get(Layer, layer_id)
+        resultlayer = ResultLayer(
+            occ_limit=layer.occ_limit,
+            occ_deduct=layer.occ_deduct,
+            agg_limit=layer.agg_limit,
+            agg_deduct=layer.agg_deduct,
+        )
+        resultinstance.layers.append(resultlayer)
+
+        # Create the relationships between resultlayers and modelfiles
+        for modelfile in layer.modelfiles:
+            resultlayer.modelfiles.append(modelfile)
+
 end = perf_counter()
 print(f"Elapsed time: {end - start}")
 
@@ -92,12 +140,6 @@ print(f"Elapsed time: {end - start}")
 # Step 4: Save in the database
 # --------------------------------------
 
-with Session(engine) as session:
-    for _, row in df_layer_modelfile.iterrows():
-        layer = session.get(Layer, row["layer_id"])
-        modelfile = session.get(ModelFile, row["modelfile_id"])
-        layer.modelfiles.append(modelfile)
-    session.commit()
 
 # --------------------------------------
 # Step 4: Write the output data

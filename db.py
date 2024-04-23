@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Final, List
 
 from sqlalchemy import Column, ForeignKey, String, Table, create_engine
@@ -9,6 +8,7 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship,
 )
+
 
 # --------------------------------------
 # Create the SQLite database
@@ -31,18 +31,12 @@ class CommonMixin:
         return f"{class_name}(id={self.id!r})"
 
 
-class Layer(CommonMixin, Base):
-    # https://tigereye.tigerrisk.com/analysis/640841/layers
-    id: Mapped[int] = mapped_column(primary_key=True)
-    # created_on: Mapped[datetime]
-    # created_by: Mapped[int]  # User ID
-    # modified_on: Mapped[datetime]
-    # modified_by: Mapped[int]  # User ID
-    # pvse: Mapped[str] = mapped_column(String(21))  # T1E1234-2024-01-01-00
-    # option: Mapped[str] = mapped_column(String(2))  # 01
-    # name: Mapped[str] = mapped_column(String(50))
-    # coverage: Mapped[str] = mapped_column(String(50))  # coverage = Branche fine AGIR
-    # cat_cover: Mapped[bool]
+class LayerMixin:
+    # # pvse: Mapped[str] = mapped_column(String(21))  # T1E1234-2024-01-01-00
+    # # option: Mapped[str] = mapped_column(String(2))  # 01
+    # # name: Mapped[str] = mapped_column(String(50))
+    # # coverage: Mapped[str] = mapped_column(String(50))  # coverage = Branche fine AGIR
+    # # cat_cover: Mapped[bool]
     # premium: Mapped[int]
     occ_limit: Mapped[int]
     occ_deduct: Mapped[int]
@@ -67,6 +61,15 @@ class Layer(CommonMixin, Base):
     # # status gets its values in RefStatus.id
     # display_order: Mapped[int]
 
+
+# Approx. 10k records per year
+class Layer(CommonMixin, LayerMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # created_on: Mapped[datetime]
+    # created_by: Mapped[int]  # User ID
+    # modified_on: Mapped[datetime]
+    # modified_by: Mapped[int]  # User ID
+
     # Define the 1-to-many relationship between Layer and LayerReinstatement
     reinstatements: Mapped[List["LayerReinstatement"]] = relationship(
         back_populates="layer", cascade="all, delete-orphan"
@@ -83,15 +86,19 @@ class Layer(CommonMixin, Base):
     )
 
 
-class LayerReinstatement(CommonMixin, Base):
+class LayerReinstatementMixin:
+    order: Mapped[int]
+    number: Mapped[int]  # -1 for unlimited
+    rate: Mapped[int]
+
+
+# Approx. 30k records per year
+class LayerReinstatement(CommonMixin, LayerReinstatementMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     # created_on: Mapped[datetime]
     # created_by: Mapped[int]  # User ID
     # modified_on: Mapped[datetime]
     # modified_by: Mapped[int]  # User ID
-    order: Mapped[int]
-    number: Mapped[int]  # -1 for unlimited
-    rate: Mapped[int]
 
     # Define the 1-to-many relationship between Layer and LayerReinstatement
     layer_id: Mapped[int] = mapped_column(ForeignKey("layer.id"))
@@ -166,6 +173,52 @@ layer_modelfile: Final[Table] = Table(
     "layer_modelfile",
     Base.metadata,
     Column("layer_id", ForeignKey("layer.id"), primary_key=True),
+    Column("modelfile_id", ForeignKey("modelfile.id"), primary_key=True),
+)
+
+
+class ResultInstance(CommonMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # created_on: Mapped[datetime]
+    # created_by: Mapped[int]  # User ID
+    # modified_on: Mapped[datetime]
+    # modified_by: Mapped[int]  # User ID
+    name: Mapped[str] = mapped_column(String(50))
+
+    # Define the 1-to-many relationship between ResultInstance and ResultLayer
+    layers: Mapped[List["ResultLayer"]] = relationship(back_populates="instance")
+
+
+class ResultLayer(CommonMixin, LayerMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Define the 1-to-many relationship between ResultInstance and ResultLayer
+    instance_id: Mapped[int] = mapped_column(ForeignKey("resultinstance.id"))
+    instance: Mapped["ResultInstance"] = relationship(back_populates="layers")
+
+    # Define the 1-to-many relationship between ResultLayer and ResultLayerReinstatement
+    reinstatements: Mapped[List["ResultLayerReinstatement"]] = relationship(
+        back_populates="layer", cascade="all, delete-orphan"
+    )
+
+    # Get the modelfiles associated to the resultlayer through the association resultlayer_modelfile
+    modelfiles: Mapped[List["ModelFile"]] = relationship(
+        secondary=lambda: resultlayer_modelfile
+    )
+
+
+class ResultLayerReinstatement(CommonMixin, LayerReinstatementMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Define the 1-to-many relationship between ResultLayer and ResultLayerReinstatement
+    layer_id: Mapped[int] = mapped_column(ForeignKey("resultlayer.id"))
+    layer: Mapped["ResultLayer"] = relationship(back_populates="reinstatements")
+
+
+resultlayer_modelfile: Final[Table] = Table(
+    "resultlayer_modelfile",
+    Base.metadata,
+    Column("resultlayer_id", ForeignKey("resultlayer.id"), primary_key=True),
     Column("modelfile_id", ForeignKey("modelfile.id"), primary_key=True),
 )
 
