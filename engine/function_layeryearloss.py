@@ -6,32 +6,12 @@ from sqlalchemy.orm import Session
 
 from db import Layer, LayerReinstatement, ModelYearLoss, engine
 
-SIMULATED_YEARS = 1  # TODO: Change to 10000 for TNV
 pd.set_option("display.max_columns", None)
-pd.options.mode.copy_on_write = True
 
 
-def get_df_layeryearloss_from_relationships(df_layer_modelfile):
-    df = pd.DataFrame([])  # Initialize df_layeryearloss
-
-    layer_ids = sorted(df_layer_modelfile["layer_id"].unique())
-    for layer_id in layer_ids:
-        modelfile_ids = get_linked_modelfiles(layer_id, df_layer_modelfile)
-        df_layer = get_df_layeryearloss(layer_id, modelfile_ids)
-        df = pd.concat([df, df_layer], ignore_index=True)
-
-    return df
-
-
-def get_df_layeryearloss(layer_id, modelfiles_ids):
-    df = pd.DataFrame([])  # Initialize df_layeryearloss_single_layer
-    layer = get_layer(int(layer_id))
-
-    for modelfile_id in modelfiles_ids:
-        df_modelyearloss = get_df_modelyearloss(modelfile_id)
-        df = pd.concat([df, df_modelyearloss], ignore_index=True)
-
-    df = df.sort_values(["year", "day"])
+def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
+    layer = get_layer(layer_id)
+    df = get_df_modelyearloss(modelfiles_ids)
 
     # Process recoveries
     (
@@ -55,7 +35,8 @@ def get_df_layeryearloss(layer_id, modelfiles_ids):
 
     # Process reinstatements
     df_by_year = df[["year", "gross", "ceded", "net"]].groupby(by="year").sum()
-    expected_annual_loss = df_by_year["ceded"].sum() / SIMULATED_YEARS
+    expected_annual_loss = df_by_year["ceded"].sum() / simulated_years
+    print(f"{expected_annual_loss=:,.0f}")
 
     df_reinst = get_df_reinst(layer_id)
     if not df_reinst.empty:
@@ -76,8 +57,9 @@ def get_df_layeryearloss(layer_id, modelfiles_ids):
         )
 
         paid_premium = expected_annual_loss / (
-            1 + df_by_year["additional_premium"].sum() / SIMULATED_YEARS
+            1 + df_by_year["additional_premium"].sum() / simulated_years
         )
+        print(f"{paid_premium=:,.0f}")
 
         # Finally
         (
@@ -109,6 +91,7 @@ def get_df_layeryearloss(layer_id, modelfiles_ids):
             "loss_type",
         ]
     ]
+    df["layer_id"] = layer_id
 
     return df
 
@@ -123,19 +106,26 @@ def get_layer(layer_id):
     return Session(engine).get(Layer, layer_id)
 
 
-def get_df_modelyearloss(modelfile_id):
-    query = select(ModelYearLoss).filter_by(modelfile_id=modelfile_id)
+def get_df_modelyearloss(modelfile_ids):
+    query = (
+        select(ModelYearLoss)
+        .filter(ModelYearLoss.modelfile_id.in_(modelfile_ids))
+        .order_by(ModelYearLoss.year, ModelYearLoss.day)
+    )
     df = pd.read_sql_query(query, engine)
-    df = df.drop(columns="id")
+    df = df.drop(columns=["id"])
     df = df.rename(columns={"loss": "gross"})
     return df
 
 
 def get_df_reinst(layer_id):
-    query = select(LayerReinstatement).filter_by(layer_id=layer_id)
+    query = (
+        select(LayerReinstatement)
+        .filter_by(layer_id=layer_id)
+        .order_by(LayerReinstatement.order)
+    )
     df = pd.read_sql_query(query, engine)
     df = df.drop(columns=["id", "layer_id"])
-    df = df.sort_values("order")
     return df
 
 

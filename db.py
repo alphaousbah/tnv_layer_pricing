@@ -1,4 +1,4 @@
-from typing import Final, List
+from typing import Final, List, Optional
 
 from sqlalchemy import Column, ForeignKey, String, Table, create_engine
 from sqlalchemy.orm import (
@@ -8,7 +8,6 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship,
 )
-
 
 # --------------------------------------
 # Create the SQLite database
@@ -191,6 +190,8 @@ class ResultInstance(CommonMixin, Base):
 
 class ResultLayer(CommonMixin, LayerMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int]
+    # source_id = ID of the layer from which resultlayer was copied
 
     # Define the 1-to-many relationship between ResultInstance and ResultLayer
     instance_id: Mapped[int] = mapped_column(ForeignKey("resultinstance.id"))
@@ -204,6 +205,11 @@ class ResultLayer(CommonMixin, LayerMixin, Base):
     # Get the modelfiles associated to the resultlayer through the association resultlayer_modelfile
     modelfiles: Mapped[List["ModelFile"]] = relationship(
         secondary=lambda: resultlayer_modelfile
+    )
+
+    # Define the 1-to-many relationship between ResultLayer and ResultLayerStatisticLoss
+    percentilelosses: Mapped[List["ResultLayerStatisticLoss"]] = relationship(
+        back_populates="layer", cascade="all, delete-orphan"
     )
 
 
@@ -221,6 +227,19 @@ resultlayer_modelfile: Final[Table] = Table(
     Column("resultlayer_id", ForeignKey("resultlayer.id"), primary_key=True),
     Column("modelfile_id", ForeignKey("modelfile.id"), primary_key=True),
 )
+
+
+class ResultLayerStatisticLoss(CommonMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    statistic: Mapped[str] = mapped_column(String(50))
+    # statistic = AEP/OEP/Expected Loss Agg/Expected Loss Occ
+    percentile: Mapped[Optional[float]]
+    loss: Mapped[int]
+
+    # Define the 1-to-many relationship between ResultLayer and ResultLayerStatisticLoss
+    layer_id: Mapped[int] = mapped_column(ForeignKey("resultlayer.id"))
+    layer: Mapped["ResultLayer"] = relationship(back_populates="percentilelosses")
+
 
 # Create an engine connected to a SQLite database
 engine = create_engine("sqlite://")
