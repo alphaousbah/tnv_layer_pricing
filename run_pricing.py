@@ -25,7 +25,7 @@ from engine.function_layeryearloss import get_df_layeryearloss
 from engine.function_resultlayerstatisticloss import get_df_resultlayerstatisticloss
 from utils import df_from_listobject
 
-SIMULATED_YEARS = 100000
+SIMULATED_YEARS = 100_000
 
 # --------------------------------------
 # Step 1: Open the Excel file
