@@ -38,7 +38,7 @@ try:
     wb = excel.Workbooks.Open(wb_path)
 except IndexError:
     print(Path.cwd())
-    wb = excel.Workbooks.Open(f"{Path.cwd()}/excelfile.xlsm")
+    wb = excel.Workbooks.Open(f"{Path.cwd()}/run_pricing.xlsm")
 
 # --------------------------------------
 # Step 2: Import the existing DB records

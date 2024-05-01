@@ -74,13 +74,18 @@ class Layer(CommonMixin, LayerMixin, Base):
         back_populates="layer", cascade="all, delete-orphan"
     )
 
-    # Get the modelfiles associated to the layer through the association layer_modelfile_table
+    # Get the modelfiles associated to the layer through the association layer_modelfile
     modelfiles: Mapped[List["ModelFile"]] = relationship(
         secondary=lambda: layer_modelfile
     )
 
     # Define the 1-to-many relationship between Layer and LayerYearLoss
     yearlosses: Mapped[List["LayerYearLoss"]] = relationship(
+        back_populates="layer", cascade="all, delete-orphan"
+    )
+
+    # Define the 1-to-many relationship between Layer and
+    burningcosts: Mapped[List["LayerBurningCost"]] = relationship(
         back_populates="layer", cascade="all, delete-orphan"
     )
 
@@ -115,7 +120,7 @@ class LayerYearLoss(CommonMixin, Base):
     net: Mapped[int]
     reinstated: Mapped[int]
     reinst_premium: Mapped[int]
-    loss_type: Mapped[str] = mapped_column(String(50))  # Cat/Non cat
+    loss_type: Mapped[str] = mapped_column(String(50))  # Cat/Non-cat
     # peril_id: Mapped[int]
     # peril: Mapped[str] = mapped_column(String(50))
     # model_id: Mapped[int]
@@ -126,6 +131,117 @@ class LayerYearLoss(CommonMixin, Base):
     # Define the 1-to-many relationship between Layer and ResultYearLoss
     layer_id: Mapped[int] = mapped_column(ForeignKey("layer.id"))
     layer: Mapped["Layer"] = relationship(back_populates="yearlosses")
+
+
+class PremiumFile(CommonMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # created_on: Mapped[datetime]
+    # created_by: Mapped[int]  # User ID
+    # modified_on: Mapped[datetime]
+    # modified_by: Mapped[int]  # User ID
+    name: Mapped[str] = mapped_column(String(50))
+    # data_date: Mapped[datetime]
+    # description: Mapped[str] = mapped_column(String(1000))
+    # currency: Mapped[str] = mapped_column(String(3))
+    # as_if_use_risk_count: Mapped[bool]
+    # # as_if_use_risk_count indicates if the risk measure is used for adjusting the as-is premiums to as-if
+    # as_if_agir_index: Mapped[Optional[int]]
+    # # as_if_agir_index identifies the AGIR price index used for as-ification with an index
+    # as_if_inflation_rate: Mapped[Optional[float]]
+    # # as_if_inflation_rate is entered if used. E.g. 5% (per year)
+
+    # Define the 1-to-many relationship between PremiumFile and Premium
+    premiums: Mapped[List["Premium"]] = relationship(
+        back_populates="premiumfile", cascade="all, delete-orphan"
+    )
+
+
+layer_premiumfile: Final[Table] = Table(
+    "layer_histolossfile",
+    Base.metadata,
+    Column("layer_id", ForeignKey("layer.id"), primary_key=True),
+    Column("premiumfile_id", ForeignKey("premiumfile.id"), primary_key=True),
+)
+
+
+class Premium(CommonMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # created_on: Mapped[datetime]
+    # created_by: Mapped[int]  # User ID
+    year: Mapped[int]
+    # risk_count: Mapped[Optional[int]]
+    # risk_count = number of policies covered
+    as_is_premium: Mapped[int]
+    as_if_premium: Mapped[int]
+
+    # Define the 1-to-many relationship between PremiumFile and Premium
+    premiumfile_id: Mapped[int] = mapped_column(ForeignKey("premiumfile.id"))
+    premiumfile: Mapped["PremiumFile"] = relationship(back_populates="premiums")
+
+
+class HistoLossFile(CommonMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # created_on: Mapped[datetime]
+    # created_by: Mapped[int]  # User ID
+    # modified_on: Mapped[datetime]
+    # modified_by: Mapped[int]  # User ID
+    name: Mapped[str] = mapped_column(String(50))
+    # description: Mapped[str] = mapped_column(String(1000))
+    # currency: Mapped[str] = mapped_column(String(3))
+    # data_date: Mapped[datetime]
+    # as_is_threshold: Mapped[int]
+    start_year: Mapped[int]
+    end_year: Mapped[int]
+    # as_if_agir_index: Mapped[Optional[int]]
+    # # as_if_agir_index = Identifier of the AGIR price index used for the as-ification, if applicable
+    # as_if_inflation_rate: Mapped[Optional[float]]
+    # as_if_threshold: Mapped[int]
+
+    # Define the 1-to-many relationship between HistoLossFile and HistoLoss
+    losses: Mapped[List["HistoLoss"]] = relationship(
+        back_populates="lossfile", cascade="all, delete-orphan"
+    )
+
+
+layer_histolossfile: Final[Table] = Table(
+    "layer_histolossfile",
+    Base.metadata,
+    Column("layer_id", ForeignKey("layer.id"), primary_key=True),
+    Column("histolossfile_id", ForeignKey("histolossfile.id"), primary_key=True),
+)
+
+
+class HistoLoss(CommonMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # created_on: Mapped[datetime]
+    # created_by: Mapped[int]  # User ID
+    year: Mapped[int]
+    # loss_type: Mapped[str] = mapped_column(String(50))  # loss_type = Cat/Non-cat
+    # name: Mapped[str] = mapped_column(String(50))
+    as_is_loss: Mapped[int]
+    as_if_loss: Mapped[int]
+
+    # Define the 1-to-many relationship between HistoLossFile and HistoLoss
+    lossfile_id: Mapped[int] = mapped_column(ForeignKey("histolossfile.id"))
+    lossfile: Mapped["HistoLossFile"] = relationship(back_populates="losses")
+
+
+class LayerBurningCost(CommonMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # created_on: Mapped[datetime]
+    # created_by: Mapped[int]  # User ID
+    year: Mapped[int]
+    view: Mapped[str] = mapped_column(String(5))
+    # view = As-Is/As-If
+    loss_count: Mapped[int]
+    premium: Mapped[int]
+    ceded_before_agg_limits: Mapped[int]
+    ceded: Mapped[int]
+    reinstated: Mapped[int]
+
+    # Define the 1-to-many relationship between Layer and LayerBurningCost
+    layer_id: Mapped[int] = mapped_column(ForeignKey("layer.id"))
+    layer: Mapped["Layer"] = relationship(back_populates="burningcosts")
 
 
 class ModelFile(CommonMixin, Base):
@@ -139,7 +255,7 @@ class ModelFile(CommonMixin, Base):
     # # model_class (code/digit) = class of the underlying model = Empiricial/Frequency-Severity/Exposure-based/blending/Target premium
     # name: Mapped[str] = mapped_column(String(50))
     # description: Mapped[str] = mapped_column(String(1000))
-    # loss_type: Mapped[str] = mapped_column(String(50))  # loss_type = Cat/Non cat
+    # loss_type: Mapped[str] = mapped_column(String(50))  # loss_type = Cat/Non-cat
     years_simulated: Mapped[int]
 
     # Define the 1-to-many relationship between ModelFile and ModelYearLoss
@@ -155,7 +271,7 @@ class ModelYearLoss(CommonMixin, Base):
     year: Mapped[int]
     day: Mapped[int]
     loss: Mapped[float]
-    loss_type: Mapped[str] = mapped_column(String(50))  # Cat/Non cat
+    loss_type: Mapped[str] = mapped_column(String(50))  # Cat/Non-cat
     # peril_id: Mapped[int]
     # peril: Mapped[str] = mapped_column(String(50))
     # model_id: Mapped[int]

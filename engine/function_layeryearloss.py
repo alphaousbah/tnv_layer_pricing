@@ -15,14 +15,8 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
 
     # Process recoveries
     (
-        df["occ_recov_before_agg_deduct"],
-        df["agg_deduct_before_occ"],
-        df["occ_recov_after_agg_deduct"],
-        df["agg_deduct_after_occ"],
-        df["agg_limit_before_occ"],
         df["ceded"],
         df["cumulative_ceded"],
-        df["agg_limit_after_occ"],
         df["net"],
     ) = get_occ_recoveries(
         df["year"].to_numpy(),
@@ -40,11 +34,7 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
 
     df_reinst = get_df_reinst(layer_id)
     if not df_reinst.empty:
-        (
-            df_reinst["limit_before_agg_limit"],
-            df_reinst["deduct"],
-            df_reinst["limit_after_agg_limit"],
-        ) = get_reinst_limits(
+        (df_reinst["deduct"], df_reinst["limit"]) = get_reinst_limits(
             df_reinst["number"].to_numpy(), layer.agg_limit, layer.occ_limit
         )
 
@@ -53,7 +43,7 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
             layer.occ_limit,
             df_reinst["rate"].to_numpy(),
             df_reinst["deduct"].to_numpy(),
-            df_reinst["limit_after_agg_limit"].to_numpy(),
+            df_reinst["limit"].to_numpy(),
         )
 
         paid_premium = expected_annual_loss / (
@@ -62,22 +52,18 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
         print(f"{paid_premium=:,.0f}")
 
         # Finally
-        (
-            df["reinstated"],
-            df["reinst_premium"],
-        ) = get_occ_reinstatements(
+        (df["reinstated"], df["reinst_premium"]) = get_occ_reinstatements(
             df["year"].to_numpy(),
             df["cumulative_ceded"].to_numpy(),
             layer.occ_limit,
             df_reinst["rate"].to_numpy(),
             df_reinst["deduct"].to_numpy(),
-            df_reinst["limit_after_agg_limit"].to_numpy(),
+            df_reinst["limit"].to_numpy(),
             paid_premium,
         )
 
     else:
-        df["reinstated"] = 0
-        df["reinst_premium"] = 0
+        (df_reinst["deduct"], df_reinst["limit"]) = (0, 0)
 
     df = df[
         [
@@ -181,17 +167,7 @@ def get_occ_recoveries(
         agg_limit_after_occ[i] = max(0, agg_limit_before_occ[i] - ceded[i])
         net[i] = gross[i] - ceded[i]
 
-    return (
-        occ_recov_before_agg_deduct,
-        agg_deduct_before_occ,
-        occ_recov_after_agg_deduct,
-        agg_deduct_after_occ,
-        agg_limit_before_occ,
-        ceded,
-        cumulative_ceded,
-        agg_limit_after_occ,
-        net,
-    )
+    return ceded, cumulative_ceded, net
 
 
 @njit
@@ -214,7 +190,7 @@ def get_reinst_limits(reinst_number, agg_limit, occ_limit):
             max(0, (agg_limit - occ_limit) - reinst_deduct[i]),
         )
 
-    return reinst_limit_before_agg_limit, reinst_deduct, reinst_limit_after_agg_limit
+    return reinst_deduct, reinst_limit_after_agg_limit
 
 
 @njit
