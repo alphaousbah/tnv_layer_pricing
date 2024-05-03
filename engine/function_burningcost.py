@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple
+from typing import Optional, Literal, Union
 
 import numpy as np
 import pandas as pd
@@ -32,86 +32,98 @@ def get_df_layer_burningcost(
     layer: Layer, start_year: int, end_year: int, session: Session
 ) -> Optional[pd.DataFrame]:
     print(f"{layer.id=}\n")
-    # Initialize df_burningcost
-    df = pd.DataFrame(
-        {"year": np.arange(start_year, end_year + 1)}
-    )
 
-    df_premium = get_df_premium(layer, start_year, end_year, session)
-    df = pd.merge(df, df_premium, how="outer", on="year").fillna(0)
-    # print(f"df:\n{df}\n")
-    df_loss = get_df_loss(layer, start_year, end_year, session)
-    # print(f"df_loss:\n{df_loss}\n")
+    # TODO: Concatenate dataframes !!!!!!!!!!!!!!!!!!!!!!
+    # TODO: Add a Group by year in premiums query
+    # TODO: Add a Group by year in premiums query
+    # TODO: Add a Group by year in premiums query
+    # TODO: Add a Group by year in premiums query
+    # TODO: Add a Group by year in premiums query
+    # TODO: Add a Group by year in premiums query
+    for basis in ["as_is", "as_if"]:
+        # Initialize df_burningcost
+        df = pd.DataFrame({"basis": basis, "year": np.arange(start_year, end_year + 1)})
 
-    # Initialize ceded_before_agg_limits, ceded and reinstated to 0
-    df_loss["ceded_before_agg_limits"] = 0
-    df_loss["ceded"] = 0
-    df_loss["reinstated"] = 0
+        # Get premiums
+        df_premium = get_df_premium(layer, basis, start_year, end_year, session)
+        df = pd.merge(
+            df, df_premium, how="outer", on="year"
+        ).fillna(0)
 
-    if not df_loss.empty:
-        # Process recoveries
-        # TODO: In LayerBurningCost, delete View and create as_is and as_if columns
-        # TODO: In LayerBurningCost, delete View and create as_is and as_if columns
-        # TODO: In LayerBurningCost, delete View and create as_is and as_if columns
-        # TODO: In LayerBurningCost, delete View and create as_is and as_if columns
-        # TODO: In LayerBurningCost, delete View and create as_is and as_if columns
-        # TODO: In LayerBurningCost, delete View and create as_is and as_if columns
-        # TODO: In LayerBurningCost, delete View and create as_is and as_if columns
-        # TODO: In LayerBurningCost, delete View and create as_is and as_if columns
-        # TODO: In LayerBurningCost, delete View and create as_is and as_if columns
-        (
-            df_loss["ceded_before_agg_limits"],
-            df_loss["ceded"],
-            df_loss["cumulative_ceded"],
-        ) = get_occ_recoveries(
-            df_loss["year"].to_numpy(),
-            df_loss["as_is_loss"].to_numpy(),
-            layer.occ_limit,
-            layer.occ_deduct,
-            layer.agg_limit,
-            layer.agg_deduct,
-        )
+        # Get losses and recoveries
+        df_loss = get_df_loss(layer, basis, start_year, end_year, session)
 
-        # Process reinstatements
-        df_by_year = df_loss[["year", "as_is_loss", "ceded"]].groupby(by="year").sum()
-        expected_annual_loss = df_by_year["ceded"].mean()
-        print(f"{expected_annual_loss=:,.0f}")
+        # Initialize ceded_before_agg_limits, ceded and reinstated to 0
+        df_loss["ceded_before_agg_limits"] = 0
+        df_loss["ceded"] = 0
+        df_loss["reinstated"] = 0
 
-        df_reinst = get_df_reinst(layer.id, session)
-        if not df_reinst.empty:
-            (df_reinst["deduct"], df_reinst["limit"]) = get_reinst_limits(
-                df_reinst["number"].to_numpy(), layer.agg_limit, layer.occ_limit
-            )
-
-            df_by_year["additional_premium"] = get_additional_premiums(
-                df_by_year["ceded"].to_numpy(),
-                layer.occ_limit,
-                df_reinst["rate"].to_numpy(),
-                df_reinst["deduct"].to_numpy(),
-                df_reinst["limit"].to_numpy(),
-            )
-
-            paid_premium = expected_annual_loss / (
-                1 + df_by_year["additional_premium"].mean()
-            )
-            print(f"{paid_premium=:,.0f}")
-
-            df_loss["reinstated"] = get_occ_reinstatements(
+        if not df_loss.empty:
+            # Process recoveries
+            (
+                df_loss["ceded_before_agg_limits"],
+                df_loss["ceded"],
+                df_loss["cumulative_ceded"],
+            ) = get_occ_recoveries(
                 df_loss["year"].to_numpy(),
-                df_loss["cumulative_ceded"].to_numpy(),
+                df_loss["gross"].to_numpy(),
                 layer.occ_limit,
-                df_reinst["rate"].to_numpy(),
-                df_reinst["deduct"].to_numpy(),
-                df_reinst["limit"].to_numpy(),
-                paid_premium,
+                layer.occ_deduct,
+                layer.agg_limit,
+                layer.agg_deduct,
             )
+
+            # Process reinstatements
+            df_by_year = (
+                df_loss[["year", "ceded"]].groupby(by="year").sum()
+            )
+            expected_annual_loss = df_by_year["ceded"].mean()
+            print(f"{expected_annual_loss=:,.0f}")
+
+            df_reinst = get_df_reinst(layer.id, session)
+            if not df_reinst.empty:
+                (df_reinst["deduct"], df_reinst["limit"]) = get_reinst_limits(
+                    df_reinst["number"].to_numpy(), layer.agg_limit, layer.occ_limit
+                )
+
+                df_by_year["additional_premium"] = get_additional_premiums(
+                    df_by_year["ceded"].to_numpy(),
+                    layer.occ_limit,
+                    df_reinst["rate"].to_numpy(),
+                    df_reinst["deduct"].to_numpy(),
+                    df_reinst["limit"].to_numpy(),
+                )
+
+                paid_premium = expected_annual_loss / (
+                    1 + df_by_year["additional_premium"].mean()
+                )
+                print(f"{paid_premium=:,.0f}")
+
+                df_loss["reinstated"] = get_occ_reinstatements(
+                    df_loss["year"].to_numpy(),
+                    df_loss["cumulative_ceded"].to_numpy(),
+                    layer.occ_limit,
+                    df_reinst["rate"].to_numpy(),
+                    df_reinst["deduct"].to_numpy(),
+                    df_reinst["limit"].to_numpy(),
+                    paid_premium,
+                )
 
     return df
 
 
 def get_df_premium(
-    layer: Layer, start_year: int, end_year: int, session: Session
+    layer: Layer,
+    basis: str,
+    start_year: int,
+    end_year: int,
+    session: Session,
 ) -> Optional[pd.DataFrame]:
+    # TODO: Add a Group by year in premiums query
+    # TODO: Add a Group by year in premiums query
+    # TODO: Add a Group by year in premiums query
+    # TODO: Add a Group by year in premiums query
+    # TODO: Add a Group by year in premiums query
     premiumfile_ids = [premiumfile.id for premiumfile in layer.premiumfiles]
     query = (
         select(Premium)
@@ -122,12 +134,13 @@ def get_df_premium(
         .order_by(Premium.year)
     )
     df = pd.read_sql_query(query, session.get_bind())
-    df = df.drop(columns=["id"])
+    df["premium"] = df[f"{basis}_premium"]
+    df = df[["year", "premium"]]
     return df
 
 
 def get_df_loss(
-    layer: Layer, start_year: int, end_year: int, session: Session
+    layer: Layer, basis: str, start_year: int, end_year: int, session: Session
 ) -> Optional[pd.DataFrame]:
     histolossfile_ids = [histolossfile.id for histolossfile in layer.histolossfiles]
     query = (
@@ -139,7 +152,8 @@ def get_df_loss(
         .order_by(HistoLoss.year)
     )
     df = pd.read_sql_query(query, session.get_bind())
-    df = df.drop(columns=["id"])
+    df["gross"] = df[f"{basis}_loss"]
+    df = df[["year", "gross"]]
     return df
 
 

@@ -32,7 +32,7 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
     (df["reinstated"], df["reinst_premium"]) = (0, 0)
 
     # Process reinstatements
-    df_by_year = df[["year", "gross", "ceded", "net"]].groupby(by="year").sum()
+    df_by_year = df[["year", "ceded"]].groupby(by="year").sum()
     expected_annual_loss = df_by_year["ceded"].sum() / simulated_years
     print(f"{expected_annual_loss=:,.0f}")
 

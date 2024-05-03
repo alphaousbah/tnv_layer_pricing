@@ -271,9 +271,9 @@ class LayerBurningCost(CommonMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     # created_on: Mapped[datetime]
     # created_by: Mapped[int]  # User ID
+    basis: Mapped[str] = mapped_column(String(5))
     year: Mapped[int]
-    view: Mapped[str] = mapped_column(String(5))
-    # view = As-Is/As-If
+    # basis = As-Is/As-If
     loss_count: Mapped[int]
     premium: Mapped[int]
     ceded_before_agg_limits: Mapped[int]
