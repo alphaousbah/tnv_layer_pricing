@@ -23,7 +23,11 @@ from db import (
 )
 from engine.function_layeryearloss import get_df_layeryearloss
 from engine.function_resultlayerstatisticloss import get_df_resultlayerstatisticloss
-from utils import df_from_listobject
+from utils import (
+    df_from_listobject,
+    read_from_listobject_and_save,
+    write_df_in_listobjects,
+)
 
 SIMULATED_YEARS = 100_000
 
@@ -37,59 +41,28 @@ try:
     wb_path = sys.argv[1]
     wb = excel.Workbooks.Open(wb_path)
 except IndexError:
-    print(Path.cwd())
     wb = excel.Workbooks.Open(f"{Path.cwd()}/run_pricing.xlsm")
 
 # --------------------------------------
 # Step 2: Import the existing DB records
 # --------------------------------------
 
-# https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_sql.html
-df_layer = df_from_listobject(wb.Worksheets("Database").ListObjects("Layer"))
-df_layer = df_layer.drop(columns=["id"])
-df_layer.to_sql(
-    name="layer",
-    con=engine,
-    if_exists="append",
-    index=False,
+read_from_listobject_and_save(
+    ws_database=wb.Worksheets("Database"),
+    listobjects=[
+        "Layer",
+        "LayerReinstatement",
+        "ModelFile",
+        "ModelYearLoss",
+    ],
+    engine=engine,
 )
 
-df_layerreinstatement = df_from_listobject(
-    wb.Worksheets("Database").ListObjects("LayerReinstatement")
-)
-df_layerreinstatement = df_layerreinstatement.drop(columns=["id"])
-df_layerreinstatement.to_sql(
-    name="layerreinstatement",
-    con=engine,
-    if_exists="append",
-    index=False,
-)
-
-df_modelfile = df_from_listobject(wb.Worksheets("Database").ListObjects("ModelFile"))
-df_modelfile = df_modelfile.drop(columns=["id"])
-df_modelfile.to_sql(
-    name="modelfile",
-    con=engine,
-    if_exists="append",
-    index=False,
-)
-
-df_modelyearloss = df_from_listobject(
-    wb.Worksheets("Database").ListObjects("ModelYearLoss")
-)
-df_modelyearloss = df_modelyearloss.drop(columns=["id"])
-df_modelyearloss.to_sql(
-    name="modelyearloss",
-    con=engine,
-    if_exists="append",
-    index=False,
-)
 
 # --------------------------------------
 # Step 3: Read the input data
 # --------------------------------------
 
-# Read the input data
 df_layer_modelfile = df_from_listobject(
     wb.Worksheets("Input").ListObjects("layer_modelfile")
 )
@@ -103,6 +76,7 @@ layer_ids = df_layer_modelfile["layer_id"].unique()
 
 with Session(engine) as session:
     # Delete the previous relationships between layers and modelfiles
+    # TODO: Correct the code above by retrieving all the analysis layers
     for layer_id in layer_ids:
         layer = session.get(Layer, layer_id)
         layer.modelfiles.clear()
@@ -169,49 +143,19 @@ with Session(engine) as session:
     session.commit()
 
 end = perf_counter()
-print(f"Elapsed time: {end - start}")
+print(f"Calculation time: {end - start}")
 
 # --------------------------------------
 # Step 5: Write the output data
 # --------------------------------------
 
-# Define the output worksheet and table
+start = perf_counter()
 ws_output = wb.Worksheets("Output")
-
-for DbModel in [LayerYearLoss, ResultLayerStatisticLoss]:
-    query = select(DbModel)
-    df_output = pd.read_sql(query, engine)
-    table_output = ws_output.ListObjects(DbModel.__name__)
-
-    # Clear the output table
-    if table_output.DataBodyRange is None:
-        pass
-    else:
-        table_output.DataBodyRange.Delete()
-
-    # Define the range for writing the output data, then write
-    cell_start = table_output.Range.Cells(2, 1)
-    cell_end = table_output.Range.Cells(2, 1).Offset(
-        len(df_output), len(df_output.columns)
-    )
-    ws_output.Range(cell_start, cell_end).Value = df_output.values
-
+write_df_in_listobjects(
+    DbModels=[LayerYearLoss, ResultLayerStatisticLoss],
+    ws_output=ws_output,
+    engine=engine,
+)
 ws_output.Select()
-win32api.MessageBox(0, "Done", "Python")
-
-"""
-
-ws_output.Select()
-
-Other useful commands:
-
-f = open('new_text_file.txt', 'x'
-f.write('something')
-f.close()
-wb.Save()
-wb.SaveAs('excelfile.xlsx')
-wb.Close()
-excel.Quit()
-excel = None
-
-"""
+end = perf_counter()
+print(f"Writing in Excel time: {end - start}")

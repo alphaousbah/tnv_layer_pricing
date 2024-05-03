@@ -11,13 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from win32com import client
 
-from db import (
-    Layer,
-    engine,
+from db import Analysis, HistoLossFile, Layer, LayerBurningCost, PremiumFile, engine
+from engine.function_burningcost import get_df_burningcost
+from utils import (
+    df_from_listobject,
+    read_from_listobject_and_save,
+    write_df_in_listobjects,
 )
-
-from utils import df_from_listobject
-
 
 # --------------------------------------
 # Step 1: Open the Excel file
@@ -29,84 +29,67 @@ try:
     wb_path = sys.argv[1]
     wb = excel.Workbooks.Open(wb_path)
 except IndexError:
-    print(Path.cwd())
     wb = excel.Workbooks.Open(f"{Path.cwd()}/run_burningcost.xlsm")
 
 # --------------------------------------
 # Step 2: Import the existing DB records
 # --------------------------------------
 
-# https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_sql.html
-df_layer = df_from_listobject(wb.Worksheets("Database").ListObjects("Layer"))
-df_layer = df_layer.drop(columns=["id"])
-df_layer.to_sql(
-    name="layer",
-    con=engine,
-    if_exists="append",
-    index=False,
-)
-
-df_layerreinstatement = df_from_listobject(
-    wb.Worksheets("Database").ListObjects("LayerReinstatement")
-)
-df_layerreinstatement = df_layerreinstatement.drop(columns=["id"])
-df_layerreinstatement.to_sql(
-    name="layerreinstatement",
-    con=engine,
-    if_exists="append",
-    index=False,
-)
-
-df_modelfile = df_from_listobject(wb.Worksheets("Database").ListObjects("ModelFile"))
-df_modelfile = df_modelfile.drop(columns=["id"])
-df_modelfile.to_sql(
-    name="modelfile",
-    con=engine,
-    if_exists="append",
-    index=False,
-)
-
-df_modelyearloss = df_from_listobject(
-    wb.Worksheets("Database").ListObjects("ModelYearLoss")
-)
-df_modelyearloss = df_modelyearloss.drop(columns=["id"])
-df_modelyearloss.to_sql(
-    name="modelyearloss",
-    con=engine,
-    if_exists="append",
-    index=False,
+read_from_listobject_and_save(
+    ws_database=wb.Worksheets("Database"),
+    listobjects=[
+        "Analysis",
+        "Layer",
+        "LayerReinstatement",
+        "PremiumFile",
+        "Premium",
+        "HistoLossFile",
+        "HistoLoss",
+    ],
+    engine=engine,
 )
 
 # --------------------------------------
 # Step 3: Read the input data
 # --------------------------------------
 
-# Read the input data
-df_layer_modelfile = df_from_listobject(
-    wb.Worksheets("Input").ListObjects("layer_modelfile")
-)
+ws_input = wb.Worksheets("Input")
+
+analysis_id = ws_input.Range("analysis_id").value
+start_year = ws_input.Range("start_year").value
+end_year = ws_input.Range("end_year").value
+df_layer_premiumfile = df_from_listobject(ws_input.ListObjects("layer_premiumfile"))
+df_layer_histolossfile = df_from_listobject(ws_input.ListObjects("layer_histolossfile"))
 
 # --------------------------------------
 # Step 4: Process
 # --------------------------------------
 
 start = perf_counter()
-layer_ids = df_layer_modelfile["layer_id"].unique()
 
+# Delete the previous relationships between layers and premiumfiles/histolossfiles
+# Then create and save the new relationships between layers and premiumfiles/histolossfiles
 with Session(engine) as session:
-    # Delete the previous relationships between layers and modelfiles
-    for layer_id in layer_ids:
-        layer = session.get(Layer, layer_id)
-        layer.modelfiles.clear()
+    analysis = session.get(Analysis, analysis_id)
 
-    # Create and save the new relationships between layers and modelfiles
-    for _, row in df_layer_modelfile.iterrows():
+    for layer in analysis.layers:
+        layer.premiumfiles.clear()
+        layer.histolossfiles.clear()
+
+    for _, row in df_layer_premiumfile.iterrows():
         layer = session.get(Layer, row["layer_id"])
-        modelfile = session.get(ModelFile, row["modelfile_id"])
-        layer.modelfiles.append(modelfile)
+        premiumfile = session.get(PremiumFile, row["premiumfile_id"])
+        layer.premiumfiles.append(premiumfile)
 
-end = perf_counter()
-print(f"Elapsed time: {end - start}")
+    for _, row in df_layer_histolossfile.iterrows():
+        layer = session.get(Layer, row["layer_id"])
+        histolossfile = session.get(HistoLossFile, row["histolossfile_id"])
+        layer.histolossfiles.append(histolossfile)
+
+    session.commit()
+
+# Get df_burningcost
+df_burningcost = get_df_burningcost(analysis_id, start_year, end_year)
 
 # --------------------------------------
 # Step 5: Write the output data
@@ -114,41 +97,11 @@ print(f"Elapsed time: {end - start}")
 
 # Define the output worksheet and table
 ws_output = wb.Worksheets("Output")
-
-for DbModel in [LayerYearLoss, ResultLayerStatisticLoss]:
-    query = select(DbModel)
-    df_output = pd.read_sql(query, engine)
-    table_output = ws_output.ListObjects(DbModel.__name__)
-
-    # Clear the output table
-    if table_output.DataBodyRange is None:
-        pass
-    else:
-        table_output.DataBodyRange.Delete()
-
-    # Define the range for writing the output data, then write
-    cell_start = table_output.Range.Cells(2, 1)
-    cell_end = table_output.Range.Cells(2, 1).Offset(
-        len(df_output), len(df_output.columns)
-    )
-    ws_output.Range(cell_start, cell_end).Value = df_output.values
-
+write_df_in_listobjects(
+    DbModels=[LayerBurningCost],
+    ws_output=ws_output,
+    engine=engine,
+)
 ws_output.Select()
-win32api.MessageBox(0, "Done", "Python")
-
-"""
-
-ws_output.Select()
-
-Other useful commands:
-
-f = open('new_text_file.txt', 'x'
-f.write('something')
-f.close()
-wb.Save()
-wb.SaveAs('excelfile.xlsx')
-wb.Close()
-excel.Quit()
-excel = None
-
-"""
+end = perf_counter()
+print(f"Elapsed time: {end - start}")

@@ -30,6 +30,33 @@ class CommonMixin:
         return f"{class_name}(id={self.id!r})"
 
 
+class Analysis(CommonMixin, Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # created_on: Mapped[datetime]
+    # created_by: Mapped[int]  # User ID
+    # modified_on: Mapped[datetime]
+    # modified_by: Mapped[int]  # User ID
+    # renewal_year: Mapped[int]
+    name: Mapped[str] = mapped_column(String(50))
+    # description: Mapped[str] = mapped_column(String(1000))
+    # quote: Mapped[int]
+    # country: Mapped[str] = mapped_column(String(2))
+    # # Country code ISO 3166-1 alpha-2: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
+    # treaty_class: Mapped[str] = mapped_column(String(50))
+    # # treaty_class = Non-proportional/Proportional
+    # currency: Mapped[str] = mapped_column(String(3))
+    # exchange_rate_date: Mapped[datetime]
+    # state = Mapped[str]
+    # status = Mapped[str]
+    # source_id: Mapped[int]
+    # # source_id = ID of the analysis from which the current analysis was copied, if applicable
+
+    # Define the 1-to-many relationship between Analysis and Layer
+    layers: Mapped[List["Layer"]] = relationship(
+        back_populates="analysis", cascade="all, delete-orphan"
+    )
+
+
 class LayerMixin:
     # # pvse: Mapped[str] = mapped_column(String(21))  # T1E1234-2024-01-01-00
     # # option: Mapped[str] = mapped_column(String(2))  # 01
@@ -69,9 +96,23 @@ class Layer(CommonMixin, LayerMixin, Base):
     # modified_on: Mapped[datetime]
     # modified_by: Mapped[int]  # User ID
 
+    # Define the 1-to-many relationship between Analysis and Layer
+    analysis_id: Mapped[int] = mapped_column(ForeignKey("analysis.id"))
+    analysis: Mapped["Analysis"] = relationship(back_populates="layers")
+
     # Define the 1-to-many relationship between Layer and LayerReinstatement
     reinstatements: Mapped[List["LayerReinstatement"]] = relationship(
         back_populates="layer", cascade="all, delete-orphan"
+    )
+
+    # Get the premiumfiles associated to the layer through the association layer_premiumfile
+    premiumfiles: Mapped[List["PremiumFile"]] = relationship(
+        secondary=lambda: layer_premiumfile
+    )
+
+    # Get the histolossfiles associated to the layer through the association layer_histolossfile
+    histolossfiles: Mapped[List["HistoLossFile"]] = relationship(
+        secondary=lambda: layer_histolossfile
     )
 
     # Get the modelfiles associated to the layer through the association layer_modelfile
@@ -157,7 +198,7 @@ class PremiumFile(CommonMixin, Base):
 
 
 layer_premiumfile: Final[Table] = Table(
-    "layer_histolossfile",
+    "layer_premiumfile",
     Base.metadata,
     Column("layer_id", ForeignKey("layer.id"), primary_key=True),
     Column("premiumfile_id", ForeignKey("premiumfile.id"), primary_key=True),

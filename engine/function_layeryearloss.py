@@ -12,6 +12,7 @@ pd.set_option("display.max_columns", None)
 def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
     layer = get_layer(layer_id)
     df = get_df_modelyearloss(modelfiles_ids)
+    df["layer_id"] = layer_id
 
     # Process recoveries
     (
@@ -26,6 +27,9 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
         layer.agg_limit,
         layer.agg_deduct,
     )
+
+    # Initialize reinstated and reinst_premium to 0
+    (df["reinstated"], df["reinst_premium"]) = (0, 0)
 
     # Process reinstatements
     df_by_year = df[["year", "gross", "ceded", "net"]].groupby(by="year").sum()
@@ -51,7 +55,6 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
         )
         print(f"{paid_premium=:,.0f}")
 
-        # Finally
         (df["reinstated"], df["reinst_premium"]) = get_occ_reinstatements(
             df["year"].to_numpy(),
             df["cumulative_ceded"].to_numpy(),
@@ -62,9 +65,7 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
             paid_premium,
         )
 
-    else:
-        (df_reinst["deduct"], df_reinst["limit"]) = (0, 0)
-
+    # Finally
     df = df[
         [
             "year",
@@ -75,9 +76,9 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
             "reinstated",
             "reinst_premium",
             "loss_type",
+            "layer_id",
         ]
     ]
-    df["layer_id"] = layer_id
 
     return df
 
@@ -129,7 +130,7 @@ def get_occ_recoveries(
 ):
     n = len(gross)  # n = loss count
 
-    # Initialize output arrays
+    # Initialize arrays
     occ_recov_before_agg_deduct = np.empty(n, dtype="float64")
     agg_deduct_before_occ = np.empty(n, dtype="float64")
     occ_recov_after_agg_deduct = np.empty(n, dtype="float64")
