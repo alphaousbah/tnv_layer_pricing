@@ -1,11 +1,11 @@
-from typing import Optional, Literal, Union
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 from numpy import ndarray
 from numpy.typing import NDArray
 from numba import njit
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, select, func
 from sqlalchemy.orm import Session
 
 from db import Analysis, Layer, LayerReinstatement, Premium, HistoLoss, engine
@@ -14,17 +14,13 @@ pd.set_option("display.max_columns", None)
 
 
 def get_df_burningcost(
-    analysis_id: int, start_year: int, end_year: int
+    analysis_id: int, start_year: int, end_year: int, session: Session
 ) -> Optional[pd.DataFrame]:
-    # TODO: Think of the better way to process code
-    with Session(engine) as session:
-        analysis = session.get(Analysis, analysis_id)
-
-        for layer in analysis.layers:
-            df_layer_burningcost = get_df_layer_burningcost(
-                layer, start_year, end_year, session
-            )
-
+    analysis = session.get(Analysis, analysis_id)
+    for layer in analysis.layers:
+        df_layer_burningcost = get_df_layer_burningcost(
+            layer, start_year, end_year, session
+        )
     return None
 
 
@@ -34,21 +30,17 @@ def get_df_layer_burningcost(
     print(f"{layer.id=}\n")
 
     # TODO: Concatenate dataframes !!!!!!!!!!!!!!!!!!!!!!
-    # TODO: Add a Group by year in premiums query
-    # TODO: Add a Group by year in premiums query
-    # TODO: Add a Group by year in premiums query
-    # TODO: Add a Group by year in premiums query
-    # TODO: Add a Group by year in premiums query
-    # TODO: Add a Group by year in premiums query
+    # TODO: Concatenate dataframes !!!!!!!!!!!!!!!!!!!!!!
+    # TODO: Concatenate dataframes !!!!!!!!!!!!!!!!!!!!!!
+    # TODO: Concatenate dataframes !!!!!!!!!!!!!!!!!!!!!!
+
     for basis in ["as_is", "as_if"]:
         # Initialize df_burningcost
         df = pd.DataFrame({"basis": basis, "year": np.arange(start_year, end_year + 1)})
 
         # Get premiums
         df_premium = get_df_premium(layer, basis, start_year, end_year, session)
-        df = pd.merge(
-            df, df_premium, how="outer", on="year"
-        ).fillna(0)
+        df = pd.merge(df, df_premium, how="outer", on="year").fillna(0)
 
         # Get losses and recoveries
         df_loss = get_df_loss(layer, basis, start_year, end_year, session)
@@ -74,9 +66,7 @@ def get_df_layer_burningcost(
             )
 
             # Process reinstatements
-            df_by_year = (
-                df_loss[["year", "ceded"]].groupby(by="year").sum()
-            )
+            df_by_year = df_loss[["year", "ceded"]].groupby(by="year").sum()
             expected_annual_loss = df_by_year["ceded"].mean()
             print(f"{expected_annual_loss=:,.0f}")
 
@@ -119,22 +109,56 @@ def get_df_premium(
     end_year: int,
     session: Session,
 ) -> Optional[pd.DataFrame]:
-    # TODO: Add a Group by year in premiums query
-    # TODO: Add a Group by year in premiums query
-    # TODO: Add a Group by year in premiums query
-    # TODO: Add a Group by year in premiums query
-    # TODO: Add a Group by year in premiums query
+    """
+    Retrieve a DataFrame with aggregated premium amounts for a specific layer and year range.
+
+    Parameters
+    ----------
+    layer : Layer
+        The layer for which the premiums are retrieved.
+    basis : str
+        Specifies the premium basis: either "as_is" or "as_if".
+    start_year : int
+        The start year for the premium selection.
+    end_year : dtype, default None
+        The end year for the premium selection.
+    session : Session
+        The SQLAlchemy session for database interaction.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing two columns: 'year' and 'premium', aggregated based on the specified basis.
+
+    Raises
+    ------
+    ValueError
+        If the `basis` is not one of the allowed values.
+    """
+    if basis not in ["as_is", "as_if"]:
+        raise ValueError('basis must be "as_is" or "as_if"')
+
+    # Query premium IDs associated with the layer
     premiumfile_ids = [premiumfile.id for premiumfile in layer.premiumfiles]
+
+    # Construct the SQL query
+    premium_column = getattr(Premium, f"{basis}_premium")
     query = (
-        select(Premium)
+        select(
+            Premium.year,
+            func.sum(premium_column).label("premium"),
+        )
         .where(
             Premium.premiumfile_id.in_(premiumfile_ids),
-            Premium.year.in_(np.arange(start_year, end_year + 1)),
+            # Premium.year.in_(np.arange(start_year, end_year + 1)),
+            Premium.year.between(start_year, end_year),
         )
+        .group_by(Premium.year)
         .order_by(Premium.year)
     )
+
+    # Execute the query and load the result into a DataFrame
     df = pd.read_sql_query(query, session.get_bind())
-    df["premium"] = df[f"{basis}_premium"]
     df = df[["year", "premium"]]
     return df
 

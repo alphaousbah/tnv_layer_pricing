@@ -88,8 +88,8 @@ with Session(engine) as session:
 
     session.commit()
 
-# Get df_burningcost
-df_burningcost = get_df_burningcost(analysis_id, start_year, end_year)
+    # Get df_burningcost
+    df_burningcost = get_df_burningcost(analysis_id, start_year, end_year, session)
 
 # --------------------------------------
 # Step 5: Write the output data
