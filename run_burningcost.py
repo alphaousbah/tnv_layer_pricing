@@ -94,6 +94,12 @@ with Session(engine) as session:
 
     # Get df_burningcost
     df_burningcost = get_df_burningcost(analysis_id, start_year, end_year, session)
+    df_burningcost.to_sql(
+        name="layerburningcost",
+        con=engine,
+        if_exists="append",
+        index=False,
+    )
 
 # --------------------------------------
 # Step 5: Write the output data

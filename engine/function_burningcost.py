@@ -45,13 +45,14 @@ def get_df_burningcost(
 
     log.info("Processing analysis", analysis_id=analysis_id)
     burningcosts = [
-        get_df_burningcost_layer(layer, start_year, end_year, session)
+        get_df_burningcost_for_layer(layer, start_year, end_year, session)
         for layer in analysis.layers
     ]
+
     return pd.concat(burningcosts)
 
 
-def get_df_burningcost_layer(
+def get_df_burningcost_for_layer(
     layer: Layer, start_year: int, end_year: int, session: Session
 ) -> Optional[pd.DataFrame]:
     """
