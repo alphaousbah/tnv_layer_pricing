@@ -40,7 +40,7 @@ def get_df_burningcost(
     analysis = session.get(Analysis, analysis_id)
 
     if analysis is None:
-        log.error("Analysis not found", analysis_id=analysis_id)
+        log.warning("Analysis not found", analysis_id=analysis_id)
         return None
 
     log.info("Processing analysis", analysis_id=analysis_id)
