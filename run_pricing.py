@@ -5,13 +5,10 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
-import pandas as pd
-import win32api
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 from win32com import client
 
-from db import (
+from database import (
     Layer,
     LayerYearLoss,
     ModelFile,

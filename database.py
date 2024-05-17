@@ -274,8 +274,8 @@ class LayerBurningCost(CommonMixin, Base):
     basis: Mapped[str] = mapped_column(String(5))
     year: Mapped[int]
     # basis = As-Is/As-If
-    loss_count: Mapped[int]
     premium: Mapped[int]
+    loss_count: Mapped[int]
     ceded_before_agg_limits: Mapped[int]
     ceded: Mapped[int]
     reinstated: Mapped[int]

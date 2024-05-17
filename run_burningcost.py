@@ -5,13 +5,17 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
-import pandas as pd
-import win32api
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 from win32com import client
 
-from db import Analysis, HistoLossFile, Layer, LayerBurningCost, PremiumFile, engine
+from database import (
+    Analysis,
+    HistoLossFile,
+    Layer,
+    LayerBurningCost,
+    PremiumFile,
+    engine,
+)
 from engine.function_burningcost import get_df_burningcost
 from utils import (
     df_from_listobject,

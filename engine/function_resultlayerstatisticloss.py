@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import select
 
-from db import LayerYearLoss, engine
+from database import LayerYearLoss, engine
 
 PERCENTILES = [
     0.999,
