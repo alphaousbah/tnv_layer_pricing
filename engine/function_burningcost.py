@@ -6,7 +6,13 @@ from numpy import ndarray
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from database import Analysis, HistoLoss, Layer, LayerReinstatement, Premium
+from database import (
+    Analysis,
+    HistoLoss,
+    Layer,
+    LayerReinstatement,
+    Premium,
+)
 
 pd.set_option("display.max_columns", None)
 log = structlog.get_logger()
