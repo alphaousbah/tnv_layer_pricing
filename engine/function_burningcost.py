@@ -300,11 +300,11 @@ def get_occ_recoveries(
     :param occ_deduct: The deductible amount applied to each individual occurrence.
     :param agg_limit: The aggregate limit across all occurrences within the same year.
     :param agg_deduct: The deductible amount that applies to all occurrences combined within the same year.
-    :return: A tuple containing three ndarrays:
+    :return: A tuple containing four ndarrays:
               1. Occurrence recoveries before applying the aggregate deductible.
               2. Ceded amounts after applying both occurrence and aggregate calculations.
-              3. Cumulative ceded amounts for successive losses within the same year.
-              4. The cede loss count
+              3. The count of the ceded losses.
+              4. Cumulative ceded amounts for successive losses within the same year.
     """
     n = len(gross)  # n = loss count
 
