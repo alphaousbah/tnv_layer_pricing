@@ -111,7 +111,7 @@ def get_df_premium_by_year(
     :param end_year: The end year for the premium selection.
     :param session: The SQLAlchemy session for database interaction.
     :return: A DataFrame containing two columns: 'year' and 'premium' for the specified basis aggregated by year.
-    :raises ValueError: If the `basis` is not one of the allowed values.
+    :raise ValueError: If the `basis` is not one of the allowed values.
     """
     if basis not in ["as_is", "as_if"]:
         raise ValueError('basis must be "as_is" or "as_if"')
@@ -149,7 +149,7 @@ def get_df_loss_by_year(
     :param end_year: The ending year for the loss data.
     :param session: The SQLAlchemy session for database interaction.
     :return: A DataFrame containing the processed loss data by year with columns ['year', 'ceded_before_agg_limits', 'ceded', 'reinstated']. Returns an empty DataFrame with the specified columns if no loss data is found.
-    :raises ValueError: If the `basis` is not one of the allowed values.
+    :raise ValueError: If the `basis` is not one of the allowed values.
     """
     if basis not in ["as_is", "as_if"]:
         raise ValueError('basis must be "as_is" or "as_if"')
@@ -254,7 +254,7 @@ def get_df_loss(
     :param end_year: The end year for the loss selection.
     :param session: The SQLAlchemy session for database connection.
     :return: A DataFrame containing two columns: 'year' and 'gross'
-    :raises ValueError: If the `basis` is not one of the allowed values.
+    :raise ValueError: If the `basis` is not one of the allowed values.
     """
     if basis not in ["as_is", "as_if"]:
         raise ValueError('basis must be "as_is" or "as_if"')
