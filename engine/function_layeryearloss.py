@@ -131,15 +131,15 @@ def get_occ_recoveries(
     n = len(gross)  # n = loss count
 
     # Initialize arrays
-    occ_recov_before_agg_deduct = np.empty(n, dtype=np.float64)
-    agg_deduct_before_occ = np.empty(n, dtype=np.float64)
-    occ_recov_after_agg_deduct = np.empty(n, dtype=np.float64)
-    agg_deduct_after_occ = np.empty(n, dtype=np.float64)
-    agg_limit_before_occ = np.empty(n, dtype=np.float64)
-    ceded = np.empty(n, dtype=np.float64)
-    cumulative_ceded = np.empty(n, dtype=np.float64)
-    agg_limit_after_occ = np.empty(n, dtype=np.float64)
-    net = np.empty(n, dtype=np.float64)
+    occ_recov_before_agg_deduct = np.empty(n, dtype=np.int64)
+    agg_deduct_before_occ = np.empty(n, dtype=np.int64)
+    occ_recov_after_agg_deduct = np.empty(n, dtype=np.int64)
+    agg_deduct_after_occ = np.empty(n, dtype=np.int64)
+    agg_limit_before_occ = np.empty(n, dtype=np.int64)
+    ceded = np.empty(n, dtype=np.int64)
+    cumulative_ceded = np.empty(n, dtype=np.int64)
+    agg_limit_after_occ = np.empty(n, dtype=np.int64)
+    net = np.empty(n, dtype=np.int64)
 
     for i in range(n):
         occ_recov_before_agg_deduct[i] = min(occ_limit, max(0, gross[i] - occ_deduct))
@@ -175,9 +175,9 @@ def get_occ_recoveries(
 def get_reinst_limits(reinst_number, agg_limit, occ_limit):
     n = len(reinst_number)  # n = reinstatement count
 
-    reinst_limit_before_agg_limit = np.empty(n, dtype=np.float64)
-    reinst_deduct = np.empty(n, dtype=np.float64)
-    reinst_limit_after_agg_limit = np.empty(n, dtype=np.float64)
+    reinst_limit_before_agg_limit = np.empty(n, dtype=np.int64)
+    reinst_deduct = np.empty(n, dtype=np.int64)
+    reinst_limit_after_agg_limit = np.empty(n, dtype=np.int64)
 
     for i in range(n):
         reinst_limit_before_agg_limit[i] = reinst_number[i] * occ_limit
@@ -201,8 +201,8 @@ def get_additional_premiums(
     years_count = len(ceded_by_year)
     reinst_count = len(reinst_rate)
 
-    additional_premium_reinst = np.empty((years_count, reinst_count), dtype=np.float64)
-    additional_premium = np.empty(years_count, dtype=np.float64)
+    additional_premium_reinst = np.empty((years_count, reinst_count), dtype=np.int64)
+    additional_premium = np.empty(years_count, dtype=np.int64)
 
     for i in range(years_count):
         for j in range(reinst_count):
@@ -229,15 +229,15 @@ def get_occ_reinstatements(
     loss_count = len(cumulative_ceded)
     reinst_count = len(reinst_rate)
 
-    reinst_limit_before_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reinst_deduct_before_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reinstated_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reinst_limit_after_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reins_deduct_after_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reinst_premium_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
+    reinst_limit_before_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reinst_deduct_before_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reinstated_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reinst_limit_after_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reins_deduct_after_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reinst_premium_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
 
-    reinstated = np.empty(loss_count, dtype=np.float64)
-    reinst_premium = np.empty(loss_count, dtype=np.float64)
+    reinstated = np.empty(loss_count, dtype=np.int64)
+    reinst_premium = np.empty(loss_count, dtype=np.int64)
 
     for i in range(loss_count):
         for j in range(reinst_count):

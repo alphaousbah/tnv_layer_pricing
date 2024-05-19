@@ -1,7 +1,4 @@
-from typing import Optional
-
 import numpy as np
-import numpy.typing as npt
 import pandas as pd
 import structlog
 from numba import njit
@@ -17,84 +14,62 @@ log = structlog.get_logger()
 
 def get_df_burningcost(
     analysis_id: int, start_year: int, end_year: int, session: Session
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Calculate the burning cost for all layers in a given analysis over a range of years.
 
     :param analysis_id: The ID of the analysis to retrieve layers from.
-    :type analysis_id: int
     :param start_year: The start year for the calculation.
-    :type start_year: int
     :param end_year: The end year for the calculation.
-    :type end_year: int
     :param session: Database session for data retrieval.
-    :type session: Session
     :return: A DataFrame containing the burning cost for all layers in the analysis.
-    :rtype: Optional[pd.DataFrame]
     """
     analysis = session.get(Analysis, analysis_id)
 
     if analysis is None:
         log.warning("Analysis not found", analysis_id=analysis_id)
-        return None
+        return pd.DataFrame()
 
     log.info("Processing analysis", analysis_id=analysis_id)
     burningcosts = [
         get_df_burningcost_for_layer(layer, start_year, end_year, session)
         for layer in analysis.layers
     ]
-
-    return pd.concat(burningcosts)
+    return pd.concat(burningcosts, ignore_index=True)
 
 
 def get_df_burningcost_for_layer(
     layer: Layer, start_year: int, end_year: int, session: Session
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Calculate the burning cost for a given layer over a range of years.
 
     :param layer: The layer for which to calculate the burning cost.
-    :type layer: Layer
     :param start_year: The start year for the calculation.
-    :type start_year: int
     :param end_year: The end year for the calculation.
-    :type end_year: int
     :param session: Database session for data retrieval.
-    :type session: Session
     :return: A DataFrame containing the burning cost for 'as_is' and 'as_if' bases.
-    :rtype: Optional[pd.DataFrame]
     """
     log.info("Calculating burning cost for layer", layer=layer)
     burningcosts = [
         get_df_burning_cost_for_basis(layer, basis, start_year, end_year, session)
         for basis in ["as_is", "as_if"]
     ]
-    return pd.concat(burningcosts)
+    return pd.concat(burningcosts, ignore_index=True)
 
 
 def get_df_burning_cost_for_basis(
     layer: Layer, basis: str, start_year: int, end_year: int, session: Session
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Calculate the burning cost for a given basis over a range of years.
 
     :param layer: The layer for which to calculate the burning cost.
-    :type layer: Layer
-
     :param basis: The basis type ('as_is' or 'as_if').
-    :type basis: str
-
     :param start_year: The start year for the calculation.
-    :type start_year: int
-
     :param end_year: The end year for the calculation.
-    :type end_year: int
-
     :param session: Database session for data retrieval.
-    :type session: Session
-
     :return: A DataFrame containing the burning cost for the specified basis.
-    :rtype: Optional[pd.DataFrame]
     """
     log.info("Calculating burning cost for basis", basis=basis)
     df_burningcost = pd.DataFrame(
@@ -126,27 +101,16 @@ def get_df_premium_by_year(
     start_year: int,
     end_year: int,
     session: Session,
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Retrieve a DataFrame with aggregated premium amounts for a specific layer, basis, and year range.
 
     :param layer: The layer for which the premiums are retrieved.
-    :type layer: Layer
-
     :param basis: Specifies the premium basis: either "as_is" or "as_if".
-    :type basis: str
-
     :param start_year: The start year for the premium selection.
-    :type start_year: int
-
     :param end_year: The end year for the premium selection.
-    :type end_year: int, optional
-
     :param session: The SQLAlchemy session for database interaction.
-    :type session: Session
-
     :return: A DataFrame containing two columns: 'year' and 'premium' for the specified basis aggregated by year.
-    :rtype: pd.DataFrame
     :raises ValueError: If the `basis` is not one of the allowed values.
     """
     if basis not in ["as_is", "as_if"]:
@@ -175,27 +139,16 @@ def get_df_premium_by_year(
 
 def get_df_loss_by_year(
     layer: Layer, basis: str, start_year: int, end_year: int, session: Session
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Retrieve and process loss data by year for a given layer.
 
     :param layer: The layer for which the loss data is being processed.
-    :type layer: Layer
-
     :param basis: Specifies the premium basis: either "as_is" or "as_if".
-    :type basis: str
-
     :param start_year: The starting year for the loss data.
-    :type start_year: int
-
     :param end_year: The ending year for the loss data.
-    :type end_year: int
-
     :param session: The SQLAlchemy session for database interaction.
-    :type session: Session
-
-    :returns: A DataFrame containing the processed loss data by year with columns ['year', 'ceded_before_agg_limits', 'ceded', 'reinstated']. Returns an empty DataFrame with the specified columns if no loss data is found.
-    :rtype: Optional[pd.DataFrame]
+    :return: A DataFrame containing the processed loss data by year with columns ['year', 'ceded_before_agg_limits', 'ceded', 'reinstated']. Returns an empty DataFrame with the specified columns if no loss data is found.
     :raises ValueError: If the `basis` is not one of the allowed values.
     """
     if basis not in ["as_is", "as_if"]:
@@ -206,13 +159,20 @@ def get_df_loss_by_year(
 
     if df_loss.empty:
         return pd.DataFrame(
-            columns=["year", "ceded_before_agg_limits", "ceded", "reinstated"]
+            columns=[
+                "year",
+                "ceded_before_agg_limits",
+                "ceded",
+                "ceded_loss_count",
+                "reinstated",
+            ]
         )
 
     # Process individual recoveries
     (
         df_loss["ceded_before_agg_limits"],
         df_loss["ceded"],
+        df_loss["ceded_loss_count"],
         df_loss["cumulative_ceded"],
     ) = get_occ_recoveries(
         df_loss["year"].to_numpy(),
@@ -268,7 +228,15 @@ def get_df_loss_by_year(
         )
 
     return (
-        df_loss[["year", "ceded_before_agg_limits", "ceded", "reinstated"]]
+        df_loss[
+            [
+                "year",
+                "ceded_before_agg_limits",
+                "ceded",
+                "ceded_loss_count",
+                "reinstated",
+            ]
+        ]
         .groupby("year", as_index=False)
         .sum()
     )
@@ -276,28 +244,16 @@ def get_df_loss_by_year(
 
 def get_df_loss(
     layer: Layer, basis: str, start_year: int, end_year: int, session: Session
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Retrieve a DataFrame with the losses for a specific layer, basis and year range.
 
     :param layer: The layer for which the losses are retrieved.
-    :type layer: Layer
-
     :param basis: Specifies the loss basis: either "as_is" or "as_if".
-    :type basis: str
-
     :param start_year: The start year for the loss selection.
-    :type start_year: int
-
     :param end_year: The end year for the loss selection.
-    :type end_year: int
-
     :param session: The SQLAlchemy session for database connection.
-    :type session: Session
-
-    :returns: A DataFrame containing two columns: 'year' and 'gross'
-    :rtype: pd.DataFrame
-
+    :return: A DataFrame containing two columns: 'year' and 'gross'
     :raises ValueError: If the `basis` is not one of the allowed values.
     """
     if basis not in ["as_is", "as_if"]:
@@ -322,13 +278,13 @@ def get_df_loss(
 
 @njit
 def get_occ_recoveries(
-    year: npt.NDArray[np.int64],
-    gross: npt.NDArray[np.int64],
+    year: ndarray,
+    gross: ndarray,
     occ_limit: int,
     occ_deduct: int,
     agg_limit: int,
     agg_deduct: int,
-) -> tuple[ndarray, ndarray, ndarray]:
+) -> tuple[ndarray, ndarray, ndarray, ndarray]:
     """
     Calculate recovery amounts from loss occurrences under specified limits and deductibles.
 
@@ -339,44 +295,35 @@ def get_occ_recoveries(
     The function uses Numba's njit decorator to improve performance.
 
     :param year: Array of integers representing the years for each loss.
-    :type year: ndarray
-
     :param gross: Array of floats representing the gross loss amounts for each occurrence.
-    :type gross: ndarray
-
     :param occ_limit: The maximum amount recoverable for any single occurrence.
-    :type occ_limit: int
-
     :param occ_deduct: The deductible amount applied to each individual occurrence.
-    :type occ_deduct: int
-
     :param agg_limit: The aggregate limit across all occurrences within the same year.
-    :type agg_limit: int
-
     :param agg_deduct: The deductible amount that applies to all occurrences combined within the same year.
-    :type agg_deduct: int
-
-    :returns: A tuple containing three ndarrays:
+    :return: A tuple containing three ndarrays:
               1. Occurrence recoveries before applying the aggregate deductible.
               2. Ceded amounts after applying both occurrence and aggregate calculations.
               3. Cumulative ceded amounts for successive losses within the same year.
-    :rtype: tuple[ndarray, ndarray, ndarray]
+              4. The cede loss count
     """
     n = len(gross)  # n = loss count
 
     # Initialize arrays for storing calculations
-    occ_recov_before_agg_deduct = np.empty(n, dtype=np.float64)
-    agg_deduct_before_occ = np.empty(n, dtype=np.float64)
-    occ_recov_after_agg_deduct = np.empty(n, dtype=np.float64)
-    agg_deduct_after_occ = np.empty(n, dtype=np.float64)
-    agg_limit_before_occ = np.empty(n, dtype=np.float64)
-    ceded = np.empty(n, dtype=np.float64)
-    cumulative_ceded = np.empty(n, dtype=np.float64)
-    agg_limit_after_occ = np.empty(n, dtype=np.float64)
-    net = np.empty(n, dtype=np.float64)
+    occ_recov_before_agg_deduct = np.empty(n, dtype=np.int64)
+    agg_deduct_before_occ = np.empty(n, dtype=np.int64)
+    occ_recov_after_agg_deduct = np.empty(n, dtype=np.int64)
+    agg_deduct_after_occ = np.empty(n, dtype=np.int64)
+    agg_limit_before_occ = np.empty(n, dtype=np.int64)
+    ceded = np.empty(n, dtype=np.int64)
+    cumulative_ceded = np.empty(n, dtype=np.int64)
+    ceded_loss_count = np.empty(n, dtype=np.int64)
+    agg_limit_after_occ = np.empty(n, dtype=np.int64)
+    net = np.empty(n, dtype=np.int64)
 
     for i in range(n):
-        occ_recov_before_agg_deduct[i] = min(occ_limit, max(0, gross[i] - occ_deduct))
+        occ_recov_before_agg_deduct[i] = min(
+            occ_limit, max(0, int(gross[i] - occ_deduct))
+        )
         agg_deduct_before_occ[i] = (
             agg_deduct
             if (i == 0 or year[i] != year[i - 1])
@@ -394,6 +341,7 @@ def get_occ_recoveries(
             else agg_limit_after_occ[i - 1]
         )
         ceded[i] = min(int(occ_recov_after_agg_deduct[i]), int(agg_limit_before_occ[i]))
+        ceded_loss_count[i] = 1 if ceded[i] > 0 else 0
         cumulative_ceded[i] = (
             ceded[i]
             if (i == 0 or year[i] != year[i - 1])
@@ -402,10 +350,10 @@ def get_occ_recoveries(
         agg_limit_after_occ[i] = max(0, int(agg_limit_before_occ[i] - ceded[i]))
         net[i] = gross[i] - ceded[i]
 
-    return occ_recov_before_agg_deduct, ceded, cumulative_ceded
+    return occ_recov_before_agg_deduct, ceded, ceded_loss_count, cumulative_ceded
 
 
-def get_df_reinst(layer_id: int, session: Session) -> Optional[pd.DataFrame]:
+def get_df_reinst(layer_id: int, session: Session) -> pd.DataFrame:
     """
     Retrieve a DataFrame with detailed reinstatement information for a specific layer.
 
@@ -413,14 +361,9 @@ def get_df_reinst(layer_id: int, session: Session) -> Optional[pd.DataFrame]:
     It retrieves the order, number, and rate of reinstatements, sorting them by the order of reinstatement.
 
     :param layer_id: The unique identifier of the layer for which reinstatement details are to be retrieved.
-    :type layer_id: int
-
     :param session: An instance of SQLAlchemy Session to be used for executing the database query.
-    :type session: Session
-
     :return: A DataFrame containing selected columns ('order', 'number', 'rate') from the LayerReinstatement table
              for the specified layer, sorted by the 'order' column. The DataFrame is empty if no records are found.
-    :rtype: Optional[pd.DataFrame]
     """
     query = (
         select(
@@ -452,25 +395,18 @@ def get_reinst_limits(
 
     :param reinst_number: An array of reinstatement multipliers, indicating how many times the occurrence limit
                           is applied to calculate the preliminary reinstatement limit.
-    :type reinst_number: ndarray
-
     :param agg_limit: The total aggregate limit that affects all reinstatements collectively.
-    :type agg_limit: int
-
     :param occ_limit: The individual occurrence limit applied per reinstatement.
-    :type occ_limit: int
-
     :return: A tuple of two ndarrays:
              1. The cumulative deductible applied up to each reinstatement.
              2. The remaining limit for each reinstatement after considering the aggregate limit.
-    :rtype: tuple[ndarray, ndarray]
     """
     n = len(reinst_number)  # n = reinstatement count
 
     # Initialize arrays for storing calculations
-    reinst_limit_before_agg_limit = np.empty(n, dtype=np.float64)
-    reinst_deduct = np.empty(n, dtype=np.float64)
-    reinst_limit_after_agg_limit = np.empty(n, dtype=np.float64)
+    reinst_limit_before_agg_limit = np.empty(n, dtype=np.int64)
+    reinst_deduct = np.empty(n, dtype=np.int64)
+    reinst_limit_after_agg_limit = np.empty(n, dtype=np.int64)
 
     for i in range(n):
         reinst_limit_before_agg_limit[i] = reinst_number[i] * occ_limit
@@ -507,30 +443,19 @@ def get_additional_premiums(
     The function leverages Numba's njit decorator to optimize performance.
 
     :param ceded_by_year: An array of ceded amounts for each year.
-    :type ceded_by_year: ndarray
-
     :param occ_limit: The occurrence limit that normalizes the calculation of additional premiums.
-    :type occ_limit: int
-
     :param reinst_rate: An array of rates corresponding to each reinstatement.
-    :type reinst_rate: ndarray
-
     :param reinst_deduct: An array of deductible amounts corresponding to each reinstatement.
-    :type reinst_deduct: ndarray
-
     :param reinst_limit: An array of limits corresponding to each reinstatement, setting the maximum claimable
                          amount for additional premiums.
-    :type reinst_limit: ndarray
-
     :return: An array containing the total additional premium calculated for each year.
-    :rtype: ndarray
     """
     years_count = len(ceded_by_year)
     reinst_count = len(reinst_rate)
 
     # Initialize arrays for storing calculations
-    additional_premium_reinst = np.empty((years_count, reinst_count), dtype=np.float64)
-    additional_premium = np.empty(years_count, dtype=np.float64)
+    additional_premium_reinst = np.empty((years_count, reinst_count), dtype=np.int64)
+    additional_premium = np.empty(years_count, dtype=np.int64)
 
     for i in range(years_count):
         for j in range(reinst_count):
@@ -567,42 +492,27 @@ def get_occ_reinstatements(
     The function uses Numba's njit decorator to improve performance.
 
     :param year: Array of integers representing the years for each loss.
-    :type year: ndarray
-
     :param cumulative_ceded: Array of floats representing the cumulative ceded loss amounts for each occurrence.
-    :type cumulative_ceded: ndarray
-
     :param occ_limit: The maximum amount recoverable for any single occurrence.
-    :type occ_limit: int
-
     :param reinst_rate: Array of floats representing the reinstatement rates for each reinstatement.
-    :type reinst_rate: ndarray
-
     :param reinst_deduct: Array of floats representing the deductibles for each reinstatement.
-    :type reinst_deduct: ndarray
-
     :param reinst_limit: Array of floats representing the limits for each reinstatement.
-    :type reinst_limit: ndarray
-
     :param paid_premium: The paid premium amount used to calculate reinstatement premiums.
-    :type paid_premium: float
-
     :return: An array of floats representing the reinstated amounts for each occurrence.
-    :rtype: ndarray
     """
     loss_count = len(cumulative_ceded)
     reinst_count = len(reinst_rate)
 
     # Initialize arrays for storing calculations
-    reinst_limit_before_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reinst_deduct_before_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reinstated_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reinst_limit_after_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reins_deduct_after_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
-    reinst_premium_occ = np.empty((loss_count, reinst_count), dtype=np.float64)
+    reinst_limit_before_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reinst_deduct_before_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reinstated_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reinst_limit_after_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reins_deduct_after_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
+    reinst_premium_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
 
-    reinstated = np.empty(loss_count, dtype=np.float64)
-    reinst_premium = np.empty(loss_count, dtype=np.float64)
+    reinstated = np.empty(loss_count, dtype=np.int64)
+    reinst_premium = np.empty(loss_count, dtype=np.int64)
 
     for i in range(loss_count):
         for j in range(reinst_count):
@@ -624,7 +534,7 @@ def get_occ_reinstatements(
                 0, int(reinst_limit_before_occ[i, j] - reinstated_occ[i, j])
             )
             reins_deduct_after_occ[i, j] = (
-                reinst_deduct_before_occ[i, j] + reinstated_occ[i, j]
+                int(reinst_deduct_before_occ[i, j] + reinstated_occ[i, j])
                 if (i == 0 or year[i] != year[i - 1])
                 else reins_deduct_after_occ[i - 1, j] + reinstated_occ[i, j]
             )

@@ -275,9 +275,9 @@ class LayerBurningCost(CommonMixin, Base):
     year: Mapped[int]
     # basis = As-Is/As-If
     premium: Mapped[int]
-    loss_count: Mapped[Optional[int]]  # TODO: Remove Optional
     ceded_before_agg_limits: Mapped[int]
     ceded: Mapped[int]
+    ceded_loss_count: Mapped[int]
     reinstated: Mapped[int]
 
     # Define the 1-to-many relationship between Layer and LayerBurningCost
