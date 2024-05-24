@@ -40,7 +40,7 @@ except IndexError:
 # --------------------------------------
 
 read_from_listobject_and_save(
-    ws_database=wb.Worksheets("Database"),
+    worksheet=wb.Worksheets("Database"),
     listobjects=[
         "Analysis",
         "Layer",
@@ -71,28 +71,35 @@ df_layer_histolossfile = df_from_listobject(ws_input.ListObjects("layer_histolos
 
 start = perf_counter()
 
-# Delete the previous relationships between layers and premiumfiles/histolossfiles
-# Then create and save the new relationships between layers and premiumfiles/histolossfiles
 with Session(engine) as session:
     analysis = session.get(Analysis, analysis_id)
 
+    # Delete the previous relationships between layers and premiumfiles
     for layer in analysis.layers:
         layer.premiumfiles.clear()
-        layer.histolossfiles.clear()
 
+    # Create and save the new relationships between layers and premiumfiles
     for _, row in df_layer_premiumfile.iterrows():
         layer = session.get(Layer, row["layer_id"])
         premiumfile = session.get(PremiumFile, row["premiumfile_id"])
         layer.premiumfiles.append(premiumfile)
 
+    # Delete the previous relationships between layers and histolossfiles
+    for layer in analysis.layers:
+        layer.histolossfiles.clear()
+
+    # Create and save the new relationships between layers and histolossfiles
     for _, row in df_layer_histolossfile.iterrows():
         layer = session.get(Layer, row["layer_id"])
         histolossfile = session.get(HistoLossFile, row["histolossfile_id"])
         layer.histolossfiles.append(histolossfile)
 
-    session.commit()
+    # Delete the previsous burning costs
+    for layer in analysis.layers:
+        for burningcost in layer.burningcosts:
+            session.delete(burningcost)
 
-    # Get df_burningcost
+    # Calculate the burning cost for the analysis and save the results to the database
     df_burningcost = get_df_burningcost(analysis_id, start_year, end_year, session)
     df_burningcost.to_sql(
         name="layerburningcost",

@@ -269,11 +269,11 @@ class HistoLoss(CommonMixin, Base):
 
 class LayerBurningCost(CommonMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
-    # created_on: Mapped[datetime]
-    # created_by: Mapped[int]  # User ID
     basis: Mapped[str] = mapped_column(String(5))
-    year: Mapped[int]
     # basis = As-Is/As-If
+    year: Mapped[int]
+    year_selected: Mapped[bool]
+    # year_selected = True if year is selected for calculating the burning cost, False otherwise
     premium: Mapped[int]
     ceded_before_agg_limits: Mapped[int]
     ceded: Mapped[int]

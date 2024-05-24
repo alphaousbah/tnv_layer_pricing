@@ -1,22 +1,51 @@
 import numpy as np
 import pandas as pd
+import structlog
 from numba import njit
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database import Layer, LayerReinstatement, ModelYearLoss, engine
+from database import Analysis, Layer, LayerReinstatement, ModelYearLoss
 
 pd.set_option("display.max_columns", None)
+log = structlog.get_logger()
 
 
-def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
-    layer = get_layer(layer_id)
-    df = get_df_modelyearloss(modelfiles_ids)
+def get_df_yearloss(
+    analysis_id: int, simulated_years: int, session: Session
+) -> pd.DataFrame:
+    analysis = session.get(Analysis, analysis_id)
+
+    if analysis is None:
+        log.warning("Analysis not found")
+        return pd.DataFrame()
+
+    log.info("Processing analysis", analysis_id=analysis_id)
+    layeryearlosses = [
+        get_df_layeryearloss(layer.id, simulated_years, session)
+        for layer in analysis.layers
+    ]
+    return pd.concat(layeryearlosses, ignore_index=True)
+
+
+def get_df_layeryearloss(
+    layer_id: int, simulated_years: int, session: Session
+) -> pd.DataFrame:
+    log.info("Calculating year losses for layer", layer_id=layer_id)
+
+    layer = session.get(Layer, layer_id)
+    if layer is None:
+        log.warning(f"Layer with ID {layer_id} not found.")
+        return pd.DataFrame()
+
+    df = get_df_modelyearloss([modelfile.id for modelfile in layer.modelfiles], session)
     df["layer_id"] = layer_id
 
     # Process recoveries
     (
+        df["ceded_before_agg_limits"],
         df["ceded"],
+        df["ceded_loss_count"],
         df["cumulative_ceded"],
         df["net"],
     ) = get_occ_recoveries(
@@ -36,7 +65,7 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
     expected_annual_loss = df_by_year["ceded"].sum() / simulated_years
     print(f"{expected_annual_loss=:,.0f}")
 
-    df_reinst = get_df_reinst(layer_id)
+    df_reinst = get_df_reinst(layer_id, session)
     if not df_reinst.empty:
         (df_reinst["deduct"], df_reinst["limit"]) = get_reinst_limits(
             df_reinst["number"].to_numpy(), layer.agg_limit, layer.occ_limit
@@ -83,54 +112,65 @@ def get_df_layeryearloss(layer_id, modelfiles_ids, simulated_years):
     return df
 
 
-def get_linked_modelfiles(layer_id, df_layer_modelfile):
-    return df_layer_modelfile[df_layer_modelfile["layer_id"] == layer_id][
-        "modelfile_id"
-    ]
-
-
-def get_layer(layer_id):
-    return Session(engine).get(Layer, layer_id)
-
-
-def get_df_modelyearloss(modelfile_ids):
+def get_df_modelyearloss(modelfile_ids: list[int], session: Session) -> pd.DataFrame:
     query = (
-        select(ModelYearLoss)
-        .filter(ModelYearLoss.modelfile_id.in_(modelfile_ids))
+        select(
+            ModelYearLoss.year,
+            ModelYearLoss.day,
+            ModelYearLoss.loss.label("gross"),
+            ModelYearLoss.loss_type,
+        )
+        .where(ModelYearLoss.modelfile_id.in_(modelfile_ids))
         .order_by(ModelYearLoss.year, ModelYearLoss.day)
     )
-    df = pd.read_sql_query(query, engine)
-    df = df.drop(columns=["id"])
-    df = df.rename(columns={"loss": "gross"})
-    return df
+    return pd.read_sql_query(query, session.get_bind())
 
 
-def get_df_reinst(layer_id):
+def get_df_reinst(layer_id: int, session: Session) -> pd.DataFrame:
     query = (
-        select(LayerReinstatement)
-        .filter_by(layer_id=layer_id)
+        select(
+            LayerReinstatement.order,
+            LayerReinstatement.number,
+            LayerReinstatement.rate,
+        )
+        .where(LayerReinstatement.layer_id == layer_id)
         .order_by(LayerReinstatement.order)
     )
-    df = pd.read_sql_query(query, engine)
-    df = df.drop(columns=["id", "layer_id"])
-    return df
+    return pd.read_sql_query(query, session.get_bind())
 
 
-# Enhance loop performance using Numba's JIT
-# https://pandas.pydata.org/docs/user_guide/enhancingperf.html#numba-jit-compilation
-# See the Custom Function Example section
 @njit
 def get_occ_recoveries(
-    year,
-    gross,
-    occ_limit,
-    occ_deduct,
-    agg_limit,
-    agg_deduct,
-):
+    year: np.ndarray,
+    gross: np.ndarray,
+    occ_limit: int,
+    occ_deduct: int,
+    agg_limit: int,
+    agg_deduct: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Calculate recovery amounts from loss occurrences under specified limits and deductibles.
+
+    This function computes recoveries and net amounts for losses based on occurrence and
+    aggregate limits and deductibles. It processes an array of gross loss amounts for given years and
+    determines the recoverable and net amounts after applying these deductibles and limits.
+
+    :param year: Array of integers representing the years for each loss.
+    :param gross: Array of floats representing the gross loss amounts for each occurrence.
+    :param occ_limit: The maximum amount recoverable for any single occurrence.
+    :param occ_deduct: The deductible amount applied to each individual occurrence.
+    :param agg_limit: The aggregate limit across all occurrences within the same year.
+    :param agg_deduct: The deductible amount that applies to all occurrences combined within the same year.
+    :return: A tuple containing four ndarrays:
+              1. Occurrence recoveries before applying the aggregate deductible.
+              2. Ceded amounts after applying both occurrence and aggregate calculations.
+              3. The count of the ceded losses.
+              4. Cumulative ceded amounts for successive losses within the same year.
+              5. Net amounts after cession.
+    """
     n = len(gross)  # n = loss count
 
-    # Initialize arrays
+    # Initialize arrays for storing calculations
     occ_recov_before_agg_deduct = np.empty(n, dtype=np.int64)
     agg_deduct_before_occ = np.empty(n, dtype=np.int64)
     occ_recov_after_agg_deduct = np.empty(n, dtype=np.int64)
@@ -138,11 +178,14 @@ def get_occ_recoveries(
     agg_limit_before_occ = np.empty(n, dtype=np.int64)
     ceded = np.empty(n, dtype=np.int64)
     cumulative_ceded = np.empty(n, dtype=np.int64)
+    ceded_loss_count = np.empty(n, dtype=np.int64)
     agg_limit_after_occ = np.empty(n, dtype=np.int64)
     net = np.empty(n, dtype=np.int64)
 
     for i in range(n):
-        occ_recov_before_agg_deduct[i] = min(occ_limit, max(0, gross[i] - occ_deduct))
+        occ_recov_before_agg_deduct[i] = min(
+            occ_limit, max(0, int(gross[i] - occ_deduct))
+        )
         agg_deduct_before_occ[i] = (
             agg_deduct
             if (i == 0 or year[i] != year[i - 1])
@@ -160,6 +203,7 @@ def get_occ_recoveries(
             else agg_limit_after_occ[i - 1]
         )
         ceded[i] = min(int(occ_recov_after_agg_deduct[i]), int(agg_limit_before_occ[i]))
+        ceded_loss_count[i] = 1 if ceded[i] > 0 else 0
         cumulative_ceded[i] = (
             ceded[i]
             if (i == 0 or year[i] != year[i - 1])
@@ -168,13 +212,33 @@ def get_occ_recoveries(
         agg_limit_after_occ[i] = max(0, int(agg_limit_before_occ[i] - ceded[i]))
         net[i] = gross[i] - ceded[i]
 
-    return ceded, cumulative_ceded, net
+    return occ_recov_before_agg_deduct, ceded, ceded_loss_count, cumulative_ceded, net
 
 
-@njit
-def get_reinst_limits(reinst_number, agg_limit, occ_limit):
+def get_reinst_limits(
+    reinst_number: np.ndarray, agg_limit: int, occ_limit: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate the deductible and the remaining reinstatement limit after the aggregate limit.
+
+    This function calculates two main components for each reinstatement: the cumulative deductible
+    up to that reinstatement and the remaining limit after considering the aggregate limit. The
+    calculation uses the reinstatement number, which multiplies the occurrence limit to form a
+    reinstatement limit before the aggregate limit is applied. It then calculates the cumulative
+    deductible and the remaining reinstatement limit, which are affected by the aggregate and
+    occurrence limits.
+
+    :param reinst_number: An array of reinstatement multipliers, indicating how many times the occurrence limit
+                          is applied to calculate the preliminary reinstatement limit.
+    :param agg_limit: The total aggregate limit that affects all reinstatements collectively.
+    :param occ_limit: The individual occurrence limit applied per reinstatement.
+    :return: A tuple of two ndarrays:
+             1. The cumulative deductible applied up to each reinstatement.
+             2. The remaining limit for each reinstatement after considering the aggregate limit.
+    """
     n = len(reinst_number)  # n = reinstatement count
 
+    # Initialize arrays for storing calculations
     reinst_limit_before_agg_limit = np.empty(n, dtype=np.int64)
     reinst_deduct = np.empty(n, dtype=np.int64)
     reinst_limit_after_agg_limit = np.empty(n, dtype=np.int64)
@@ -188,26 +252,50 @@ def get_reinst_limits(reinst_number, agg_limit, occ_limit):
         )
         reinst_limit_after_agg_limit[i] = min(
             int(reinst_limit_before_agg_limit[i]),
-            max(0, (agg_limit - occ_limit) - reinst_deduct[i]),
+            max(0, int((agg_limit - occ_limit) - reinst_deduct[i])),
         )
 
     return reinst_deduct, reinst_limit_after_agg_limit
 
 
-@njit
 def get_additional_premiums(
-    ceded_by_year, occ_limit, reinst_rate, reinst_deduct, reinst_limit
-):
+    ceded_by_year: np.ndarray,
+    occ_limit: int,
+    reinst_rate: np.ndarray,
+    reinst_deduct: np.ndarray,
+    reinst_limit: np.ndarray,
+) -> np.ndarray:
+    """
+    Calculate additional premiums based on ceded amounts, occurrence limits, reinstatement rates,
+    deductibles, and limits for each year and each reinstatement.
+
+    This function computes the additional premium for each year considering the ceded amounts and
+    applying the rates, deductibles, and limits associated with each reinstatement. Premiums are
+    adjusted based on the proportion of the ceded amount that exceeds the deductible up to the
+    maximum limit, then multiplied by the reinstatement rate and normalized by the occurrence limit.
+
+    :param ceded_by_year: An array of ceded amounts for each year.
+    :param occ_limit: The occurrence limit that normalizes the calculation of additional premiums.
+    :param reinst_rate: An array of rates corresponding to each reinstatement.
+    :param reinst_deduct: An array of deductible amounts corresponding to each reinstatement.
+    :param reinst_limit: An array of limits corresponding to each reinstatement, setting the maximum claimable
+                         amount for additional premiums.
+    :return: An array containing the total additional premium calculated for each year.
+    """
     years_count = len(ceded_by_year)
     reinst_count = len(reinst_rate)
 
+    # Initialize arrays for storing calculations
     additional_premium_reinst = np.empty((years_count, reinst_count), dtype=np.int64)
     additional_premium = np.empty(years_count, dtype=np.int64)
 
     for i in range(years_count):
         for j in range(reinst_count):
             additional_premium_reinst[i, j] = (
-                min(reinst_limit[j], max(0, ceded_by_year[i] - reinst_deduct[j]))
+                min(
+                    int(reinst_limit[j]),
+                    max(0, int(ceded_by_year[i] - reinst_deduct[j])),
+                )
                 * reinst_rate[j]
                 / occ_limit
             )
@@ -218,17 +306,36 @@ def get_additional_premiums(
 
 @njit
 def get_occ_reinstatements(
-    year,
-    cumulative_ceded,
-    occ_limit,
-    reinst_rate,
-    reinst_deduct,
-    reinst_limit,
-    paid_premium,
-):
+    year: np.ndarray,
+    cumulative_ceded: np.ndarray,
+    occ_limit: int,
+    reinst_rate: np.ndarray,
+    reinst_deduct: np.ndarray,
+    reinst_limit: np.ndarray,
+    paid_premium: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate the reinstated amounts and premiums from cumulative ceded losses under specified reinstatement conditions.
+
+    This function computes the reinstated amounts for losses based on the occurrence limit,
+    reinstatement rates, deductibles, and limits. It processes arrays of cumulative ceded losses
+    and determines the reinstated amounts and premiums after applying these reinstatement conditions.
+
+    :param year: Array of integers representing the years for each loss.
+    :param cumulative_ceded: Array of floats representing the cumulative ceded loss amounts for each occurrence.
+    :param occ_limit: The maximum amount recoverable for any single occurrence.
+    :param reinst_rate: Array of floats representing the reinstatement rates for each reinstatement.
+    :param reinst_deduct: Array of floats representing the deductibles for each reinstatement.
+    :param reinst_limit: Array of floats representing the limits for each reinstatement.
+    :param paid_premium: The paid premium amount used to calculate reinstatement premiums.
+    :return:
+        - An array of floats representing the reinstated amounts for each occurrence.
+        - An array of floats representing the reinstated premiums for each occurrence.
+    """
     loss_count = len(cumulative_ceded)
     reinst_count = len(reinst_rate)
 
+    # Initialize arrays for storing calculations
     reinst_limit_before_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
     reinst_deduct_before_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
     reinstated_occ = np.empty((loss_count, reinst_count), dtype=np.int64)
@@ -253,13 +360,13 @@ def get_occ_reinstatements(
             )
             reinstated_occ[i, j] = min(
                 int(reinst_limit_before_occ[i, j]),
-                max(0, cumulative_ceded[i] - reinst_deduct_before_occ[i, j]),
+                max(0, int(cumulative_ceded[i] - reinst_deduct_before_occ[i, j])),
             )
             reinst_limit_after_occ[i, j] = max(
                 0, int(reinst_limit_before_occ[i, j] - reinstated_occ[i, j])
             )
             reins_deduct_after_occ[i, j] = (
-                reinst_deduct_before_occ[i, j] + reinstated_occ[i, j]
+                int(reinst_deduct_before_occ[i, j] + reinstated_occ[i, j])
                 if (i == 0 or year[i] != year[i - 1])
                 else reins_deduct_after_occ[i - 1, j] + reinstated_occ[i, j]
             )

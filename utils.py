@@ -1,19 +1,39 @@
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import Engine, select
 
 
-def df_from_listobject(listobject):
-    if listobject.DataBodyRange is None:
-        data = []
-    else:
-        data = listobject.DataBodyRange()
+def df_from_listobject(listobject: object) -> pd.DataFrame:
+    """
+    Converts a ListObject to a pandas DataFrame.
+
+    This function extracts data from a ListObject's DataBodyRange and HeaderRowRange,
+    and uses them to create a pandas DataFrame.
+
+    :param listobject: The ListObject to convert.
+    :return: The resulting DataFrame.
+    """
+    data = listobject.DataBodyRange() if listobject.DataBodyRange else []
     columns = listobject.HeaderRowRange()
     return pd.DataFrame(data, columns=columns[0])
 
 
-def read_from_listobject_and_save(ws_database, listobjects, engine):
+def read_from_listobject_and_save(
+    worksheet: object, listobjects: list[object], engine: Engine
+) -> None:
+    """
+    Reads data from list objects in a database, processes it, and saves it to an SQL database.
+
+    This function iterates over a list of listobjects, converts each object to a pandas DataFrame,
+    drops the 'id' column from the DataFrame, and saves the DataFrame to an SQL database using
+    the SQLAlchemy engine.
+
+    :param worksheet: The Excel Worksheet containing the Excel ListObjects.
+    :param listobjects: A list of Excel ListObjects to be read from the Worksheet.
+    :param engine: The SQLAlchemy engine to connect to the database.
+    :return: None
+    """
     for listobject in listobjects:
-        df = df_from_listobject(ws_database.ListObjects(listobject))
+        df = df_from_listobject(worksheet.ListObjects(listobject))
         df = df.drop(columns=["id"])
         # https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_sql.html
         df.to_sql(
