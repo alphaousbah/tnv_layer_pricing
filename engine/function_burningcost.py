@@ -156,7 +156,7 @@ def get_df_premium_by_year(
         .group_by(Premium.year)
         .order_by(Premium.year)
     )
-    return pd.read_sql_query(query, session.get_bind())
+    return pd.read_sql_query(query, session.connection())
 
 
 def get_df_loss_ceded_by_year(
@@ -304,4 +304,4 @@ def get_df_loss(
         )
         .order_by(HistoLoss.year)
     )
-    return pd.read_sql_query(query, session.get_bind())
+    return pd.read_sql_query(query, session.connection())

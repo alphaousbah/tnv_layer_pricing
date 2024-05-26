@@ -53,4 +53,5 @@ def get_df_loss(
 
 def get_df_layeryearloss(layer_id: int) -> pd.DataFrame:
     query = select(LayerYearLoss).filter_by(layer_id=layer_id)
+    # TODO: use session.connection() instead of engine
     return pd.read_sql_query(query, engine)

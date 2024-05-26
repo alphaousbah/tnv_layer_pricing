@@ -123,7 +123,7 @@ def get_df_modelyearloss(modelfile_ids: list[int], session: Session) -> pd.DataF
         .where(ModelYearLoss.modelfile_id.in_(modelfile_ids))
         .order_by(ModelYearLoss.year, ModelYearLoss.day)
     )
-    return pd.read_sql_query(query, session.get_bind())
+    return pd.read_sql_query(query, session.connection())
 
 
 def get_df_reinst(layer_id: int, session: Session) -> pd.DataFrame:
@@ -144,7 +144,7 @@ def get_df_reinst(layer_id: int, session: Session) -> pd.DataFrame:
         .where(LayerReinstatement.layer_id == layer_id)
         .order_by(LayerReinstatement.order)
     )
-    return pd.read_sql_query(query, session.get_bind())
+    return pd.read_sql_query(query, session.connection())
 
 
 @njit
