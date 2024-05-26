@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import structlog
-from numba import njit
+
+# from numba import njit
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -48,15 +49,13 @@ def get_df_layeryearloss(
         df["ceded_loss_count"],
         df["cumulative_ceded"],
         df["net"],
-    ) = njit(
-        get_occ_recoveries(
-            df["year"].to_numpy(),
-            df["gross"].to_numpy(),
-            layer.occ_limit,
-            layer.occ_deduct,
-            layer.agg_limit,
-            layer.agg_deduct,
-        )
+    ) = get_occ_recoveries(
+        df["year"].to_numpy(),
+        df["gross"].to_numpy(),
+        layer.occ_limit,
+        layer.occ_deduct,
+        layer.agg_limit,
+        layer.agg_deduct,
     )
 
     # Initialize reinstated and reinst_premium to 0
@@ -86,16 +85,14 @@ def get_df_layeryearloss(
         )
         log.info("paid_premium", paid_premium=paid_premium)
 
-        (df["reinstated"], df["reinst_premium"]) = njit(
-            get_occ_reinstatements(
-                df["year"].to_numpy(),
-                df["cumulative_ceded"].to_numpy(),
-                layer.occ_limit,
-                df_reinst["rate"].to_numpy(),
-                df_reinst["deduct"].to_numpy(),
-                df_reinst["limit"].to_numpy(),
-                paid_premium,
-            )
+        (df["reinstated"], df["reinst_premium"]) = get_occ_reinstatements(
+            df["year"].to_numpy(),
+            df["cumulative_ceded"].to_numpy(),
+            layer.occ_limit,
+            df_reinst["rate"].to_numpy(),
+            df_reinst["deduct"].to_numpy(),
+            df_reinst["limit"].to_numpy(),
+            paid_premium,
         )
 
     # Finally
