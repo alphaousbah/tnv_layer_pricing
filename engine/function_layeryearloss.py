@@ -130,10 +130,7 @@ def get_df_reinst(layer_id: int, session: Session) -> pd.DataFrame:
     """
     Retrieve a DataFrame with detailed reinstatement information for a specific layer.
 
-    This function queries the database for specific columns of reinstatement data associated with a given layer ID.
-    It retrieves the order, number, and rate of reinstatements, sorting them by the order of reinstatement.
-
-    :param layer_id: The unique identifier of the layer for which reinstatement details are to be retrieved.
+    :param layer_id: The unique identifier of the layer for which reinstatement details are retrieved.
     :param session: An instance of SQLAlchemy Session to be used for executing the database query.
     :return: A DataFrame containing selected columns ('order', 'number', 'rate') from the LayerReinstatement table
              for the specified layer, sorted by the 'order' column. The DataFrame is empty if no records are found.

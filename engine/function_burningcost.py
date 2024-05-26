@@ -33,7 +33,7 @@ def get_df_burningcost(
     :param analysis_id: The ID of the analysis to retrieve layers from.
     :param start_year: The start year for the calculation.
     :param end_year: The end year for the calculation.
-    :param session: Database session for data retrieval.
+    :param session: The SQLAlchemy session used for database access.
     :return: A DataFrame containing the burning cost for all layers in the analysis.
     """
     analysis = session.get(Analysis, analysis_id)
@@ -169,7 +169,7 @@ def get_df_loss_ceded_by_year(
     :param basis: Specifies the premium basis: either "as_is" or "as_if".
     :param start_year: The starting year for the loss data.
     :param end_year: The ending year for the loss data.
-    :param session: The SQLAlchemy session for database interaction.
+    :param session: The SQLAlchemy session used for database access.
     :return: A DataFrame containing the processed loss data by year with columns ['year', 'ceded_before_agg_limits', 'ceded', 'ceded_loss_count', 'reinstated']. Returns an empty DataFrame with the specified columns if no loss data is found.
     :raise ValueError: If the `basis` is not one of the allowed values.
     """
@@ -282,9 +282,9 @@ def get_df_loss(
 
     :param layer_id: The ID of the layer for which the losses are retrieved.
     :param basis: Specifies the loss basis: either "as_is" or "as_if".
-    :param start_year: The start year for the loss selection.
-    :param end_year: The end year for the loss selection.
-    :param session: The SQLAlchemy session for database connection.
+    :param start_year: The starting year for the loss selection.
+    :param end_year: The ending year for the loss selection.
+    :param session: The SQLAlchemy session used for database access.
     :return: A DataFrame containing two columns: 'year' and 'gross'
     :raise ValueError: If the `basis` is not one of the allowed values.
     """
