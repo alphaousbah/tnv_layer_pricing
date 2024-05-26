@@ -10,6 +10,8 @@ from database import (
     Layer,
     LayerReinstatement,
     Premium,
+    layer_histolossfile,
+    layer_premiumfile,
 )
 from engine.function_layeryearloss import (
     get_additional_premiums,
@@ -37,7 +39,7 @@ def get_df_burningcost(
     analysis = session.get(Analysis, analysis_id)
     if analysis is None:
         log.warning(f"Analysis with ID {analysis_id} not found.")
-        raise ValueError(f"Analysis with ID {analysis_id} not found.")
+        return pd.DataFrame()
 
     log.info("Processing analysis", analysis_id=analysis_id)
     burningcosts = [
@@ -53,17 +55,15 @@ def get_df_burningcost_for_layer(
     """
     Calculate the burning cost for a given layer over a range of years.
 
+    This function computes the burning cost for a specified insurance layer
+    over a given time period for both 'as_is' and 'as_if' bases.
+
     :param layer_id: The ID of the layer for which to calculate the burning cost.
-    :param start_year: The start year for the calculation.
-    :param end_year: The end year for the calculation.
-    :param session: Database session for data retrieval.
+    :param start_year: The starting year for the calculation.
+    :param end_year: The ending year for the calculation.
+    :param session: The SQLAlchemy session used for database access.
     :return: A DataFrame containing the burning cost for 'as_is' and 'as_if' bases.
     """
-    layer = session.get(Layer, layer_id)
-    if layer is None:
-        log.warning(f"Layer with ID {layer_id} not found.")
-        raise ValueError(f"Layer with ID {layer_id} not found.")
-
     log.info("Calculating burning cost for layer", layer_id=layer_id)
     burningcosts = [
         get_df_burning_cost_for_basis(layer_id, basis, start_year, end_year, session)
@@ -76,14 +76,17 @@ def get_df_burning_cost_for_basis(
     layer_id: int, basis: str, start_year: int, end_year: int, session: Session
 ) -> pd.DataFrame:
     """
-    Calculate the burning cost for a given basis over a range of years.
+    Calculate the burning cost for a given layer and basis over a range of years.
+
+    This function computes the burning cost for a specified insurance layer
+    and basis ('as_is' or 'as_if') over a given time period.
 
     :param layer_id: The ID of the layer for which to calculate the burning cost.
-    :param basis: The basis type ('as_is' or 'as_if').
-    :param start_year: The start year for the calculation.
-    :param end_year: The end year for the calculation.
-    :param session: Database session for data retrieval.
-    :return: A DataFrame containing the burning cost for the specified basis.
+    :param basis: The basis of the calculation, either 'as_is' or 'as_if'.
+    :param start_year: The starting year for the calculation.
+    :param end_year: The ending year for the calculation.
+    :param session: The SQLAlchemy session used for database access.
+    :return: A DataFrame containing the burning cost data.
     """
     log.info("Calculating burning cost for basis", basis=basis)
     df_burningcost = pd.DataFrame(
@@ -102,11 +105,11 @@ def get_df_burning_cost_for_basis(
         df_burningcost, df_premium_by_year, how="outer", on="year"
     ).fillna(0)
 
-    df_loss_by_year = get_df_loss_by_year(
+    df_loss_ceded_by_year = get_df_loss_ceded_by_year(
         layer_id, basis, start_year, end_year, session
     )
     df_burningcost = pd.merge(
-        df_burningcost, df_loss_by_year, how="outer", on="year"
+        df_burningcost, df_loss_ceded_by_year, how="outer", on="year"
     ).fillna(0)
 
     return df_burningcost
@@ -120,33 +123,31 @@ def get_df_premium_by_year(
     session: Session,
 ) -> pd.DataFrame:
     """
-    Retrieve a DataFrame with aggregated premium amounts for a specific layer, basis, and year range.
+    Retrieve the annual premium data for a given layer and basis over a range of years.
 
-    :param layer_id: The ID of the layer for which the premiums are retrieved.
-    :param basis: Specifies the premium basis: either "as_is" or "as_if".
-    :param start_year: The start year for the premium selection.
-    :param end_year: The end year for the premium selection.
-    :param session: The SQLAlchemy session for database interaction.
-    :return: A DataFrame containing two columns: 'year' and 'premium' for the specified basis aggregated by year.
-    :raise ValueError: If the `basis` is not one of the allowed values.
+    This function fetches the annual premium amounts for a specified insurance layer
+    and basis ('as_is' or 'as_if') over a given time period from the database.
+
+    :param layer_id: The ID of the layer for which to retrieve premium data.
+    :param basis: The basis of the premium, either 'as_is' or 'as_if'.
+    :param start_year: The starting year for the premium data retrieval.
+    :param end_year: The ending year for the premium data retrieval.
+    :param session: The SQLAlchemy session used for database access.
+    :raise ValueError: If the basis is not 'as_is' or 'as_if'.
+    :return: A DataFrame containing the annual premium data.
     """
     if basis not in ["as_is", "as_if"]:
         raise ValueError('basis must be "as_is" or "as_if"')
 
-    layer = session.get(Layer, layer_id)
-    if layer is None:
-        raise ValueError(f"Layer with ID {layer_id} not found.")
+    premium_for_basis = getattr(Premium, f"{basis}_premium")
+    premiumfile_ids = select(layer_premiumfile.c.premiumfile_id).where(
+        layer_premiumfile.c.layer_id == layer_id
+    )
 
-    premiumfile_ids = [premiumfile.id for premiumfile in layer.premiumfiles]
-    if not premiumfile_ids:
-        # Return columns with default values if no premiums are found, for the merge
-        return pd.DataFrame(columns=["year", "premium"])
-
-    premium_column = getattr(Premium, f"{basis}_premium")
     query = (
         select(
             Premium.year,
-            func.sum(premium_column).label("premium"),
+            func.sum(premium_for_basis).label("premium"),
         )
         .where(
             Premium.premiumfile_id.in_(premiumfile_ids),
@@ -158,7 +159,7 @@ def get_df_premium_by_year(
     return pd.read_sql_query(query, session.get_bind())
 
 
-def get_df_loss_by_year(
+def get_df_loss_ceded_by_year(
     layer_id: int, basis: str, start_year: int, end_year: int, session: Session
 ) -> pd.DataFrame:
     """
@@ -169,29 +170,34 @@ def get_df_loss_by_year(
     :param start_year: The starting year for the loss data.
     :param end_year: The ending year for the loss data.
     :param session: The SQLAlchemy session for database interaction.
-    :return: A DataFrame containing the processed loss data by year with columns ['year', 'ceded_before_agg_limits', 'ceded', 'reinstated']. Returns an empty DataFrame with the specified columns if no loss data is found.
+    :return: A DataFrame containing the processed loss data by year with columns ['year', 'ceded_before_agg_limits', 'ceded', 'ceded_loss_count', 'reinstated']. Returns an empty DataFrame with the specified columns if no loss data is found.
     :raise ValueError: If the `basis` is not one of the allowed values.
     """
     if basis not in ["as_is", "as_if"]:
         raise ValueError('basis must be "as_is" or "as_if"')
 
+    log.info("Processing loss data by year", layer_id=layer_id, basis=basis)
+
+    # Create a DataFrame with default columns for merging with the main DataFrame if no losses are found
+    default_df = pd.DataFrame(
+        columns=[
+            "year",
+            "ceded_before_agg_limits",
+            "ceded",
+            "ceded_loss_count",
+            "reinstated",
+        ]
+    )
+
     layer = session.get(Layer, layer_id)
     if layer is None:
-        raise ValueError(f"Layer with ID {layer_id} not found.")
+        log.warning(f"Layer with ID {layer_id} not found.")
+        return default_df
 
-    # Retrieve individual loss occurences in df_loss
+    # Retrieve individual losses in df_loss
     df_loss = get_df_loss(layer_id, basis, start_year, end_year, session)
     if df_loss.empty:
-        # Return columns with default values if no losses are found, for the merge
-        return pd.DataFrame(
-            columns=[
-                "year",
-                "ceded_before_agg_limits",
-                "ceded",
-                "ceded_loss_count",
-                "reinstated",
-            ]
-        )
+        return default_df
 
     # Process individual recoveries
     (
@@ -209,7 +215,7 @@ def get_df_loss_by_year(
         layer.agg_deduct,
     )
 
-    # Process individual reinstatements
+    # Process layer reinstatements
     df_stat_by_year = df_loss[["year", "ceded"]].groupby("year").sum()
     expected_annual_loss = df_stat_by_year["ceded"].mean()
     log.info("expected_annual_loss", expected_annual_loss=expected_annual_loss)
@@ -285,19 +291,15 @@ def get_df_loss(
     if basis not in ["as_is", "as_if"]:
         raise ValueError('basis must be "as_is" or "as_if"')
 
-    layer = session.get(Layer, layer_id)
-    if layer is None:
-        raise ValueError(f"Layer with ID {layer_id} not found.")
+    loss_for_basis = getattr(HistoLoss, f"{basis}_loss")
+    lossfile_ids = select(layer_histolossfile.c.histolossfile_id).where(
+        layer_histolossfile.c.layer_id == layer_id
+    )
 
-    histolossfile_ids = [histolossfile.id for histolossfile in layer.histolossfiles]
-    if not histolossfile_ids:
-        return pd.DataFrame()
-
-    loss_column = getattr(HistoLoss, f"{basis}_loss")
     query = (
-        select(HistoLoss.year, loss_column.label("gross"))
+        select(HistoLoss.year, loss_for_basis.label("gross"))
         .where(
-            HistoLoss.lossfile_id.in_(histolossfile_ids),
+            HistoLoss.lossfile_id.in_(lossfile_ids),
             HistoLoss.year.between(start_year, end_year),
         )
         .order_by(HistoLoss.year)

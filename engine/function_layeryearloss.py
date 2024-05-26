@@ -63,7 +63,7 @@ def get_df_layeryearloss(
     # Process reinstatements
     df_by_year = df[["year", "ceded"]].groupby(by="year").sum()
     expected_annual_loss = df_by_year["ceded"].sum() / simulated_years
-    print(f"{expected_annual_loss=:,.0f}")
+    log.info("expected_annual_loss", expected_annual_loss=expected_annual_loss)
 
     df_reinst = get_df_reinst(layer_id, session)
     if not df_reinst.empty:
@@ -82,7 +82,7 @@ def get_df_layeryearloss(
         paid_premium = expected_annual_loss / (
             1 + df_by_year["additional_premium"].sum() / simulated_years
         )
-        print(f"{paid_premium=:,.0f}")
+        log.info("paid_premium", paid_premium=paid_premium)
 
         (df["reinstated"], df["reinst_premium"]) = get_occ_reinstatements(
             df["year"].to_numpy(),
