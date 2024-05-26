@@ -104,7 +104,7 @@ with Session.begin() as session:
             session.delete(burningcost)
 
     # Calculate the burning cost for the analysis and save the results to the database
-    df_burningcost = get_df_burningcost(analysis_id, start_year, end_year, session)
+    df_burningcost = get_df_burningcost(session, analysis_id, start_year, end_year)
     df_burningcost.to_sql(
         name="layerburningcost",
         con=engine,
