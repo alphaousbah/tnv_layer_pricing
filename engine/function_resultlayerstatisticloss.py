@@ -20,7 +20,9 @@ PERCENTILES = [
 ]
 
 
-def get_df_resultlayerstatisticloss(layer_id, simulated_years):
+def get_df_resultlayerstatisticloss(
+    layer_id: int, simulated_years: int
+) -> pd.DataFrame:
     df_layeryearloss = get_df_layeryearloss(layer_id)
     df_aep = get_df_loss(df_layeryearloss, simulated_years, "AEP")
     df_oep = get_df_loss(df_layeryearloss, simulated_years, "OEP")
@@ -29,7 +31,9 @@ def get_df_resultlayerstatisticloss(layer_id, simulated_years):
     return df
 
 
-def get_df_loss(df_layeryearloss, simulated_years, statistic):
+def get_df_loss(
+    df_layeryearloss: pd.DataFrame, simulated_years: int, statistic: str
+) -> pd.DataFrame:
     df = pd.DataFrame({"statistic": statistic, "percentile": PERCENTILES})
     df_by_year = (
         df_layeryearloss[["year", "ceded"]]
@@ -47,6 +51,6 @@ def get_df_loss(df_layeryearloss, simulated_years, statistic):
     return df
 
 
-def get_df_layeryearloss(layer_id):
+def get_df_layeryearloss(layer_id: int) -> pd.DataFrame:
     query = select(LayerYearLoss).filter_by(layer_id=layer_id)
     return pd.read_sql_query(query, engine)
