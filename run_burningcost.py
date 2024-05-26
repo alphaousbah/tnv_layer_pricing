@@ -107,7 +107,7 @@ with Session.begin() as session:
     df_burningcost = get_df_burningcost(session, analysis_id, start_year, end_year)
     df_burningcost.to_sql(
         name="layerburningcost",
-        con=engine,
+        con=session.connection(),
         if_exists="append",
         index=False,
     )

@@ -30,7 +30,7 @@ def get_df_burningcost(
     """
     Calculate the burning cost for all layers in a given analysis over a range of years.
 
-    :param session: The SQLAlchemy session used for database access.
+    :param session: The SQLAlchemy Session for database operations.
     :param analysis_id: The ID of the analysis to retrieve layers from.
     :param start_year: The start year for the calculation.
     :param end_year: The end year for the calculation.
@@ -58,7 +58,7 @@ def get_df_burningcost_for_layer(
     This function computes the burning cost for a specified insurance layer
     over a given time period for both 'as_is' and 'as_if' bases.
 
-    :param session: The SQLAlchemy session used for database access.
+    :param session: The SQLAlchemy Session for database operations.
     :param layer_id: The ID of the layer for which to calculate the burning cost.
     :param start_year: The starting year for the calculation.
     :param end_year: The ending year for the calculation.
@@ -81,7 +81,7 @@ def get_df_burning_cost_for_basis(
     This function computes the burning cost for a specified insurance layer
     and basis ('as_is' or 'as_if') over a given time period.
 
-    :param session: The SQLAlchemy session used for database access.
+    :param session: The SQLAlchemy Session for database operations.
     :param layer_id: The ID of the layer for which to calculate the burning cost.
     :param basis: The basis of the calculation, either 'as_is' or 'as_if'.
     :param start_year: The starting year for the calculation.
@@ -128,7 +128,7 @@ def get_df_premium_by_year(
     This function fetches the annual premium amounts for a specified insurance layer
     and basis ('as_is' or 'as_if') over a given time period from the database.
 
-    :param session: The SQLAlchemy session used for database access.
+    :param session: The SQLAlchemy Session for database operations.
     :param layer_id: The ID of the layer for which to retrieve premium data.
     :param basis: The basis of the premium, either 'as_is' or 'as_if'.
     :param start_year: The starting year for the premium data retrieval.
@@ -165,7 +165,7 @@ def get_df_loss_ceded_by_year(
     """
     Retrieve and process loss data by year for a given layer.
 
-    :param session: The SQLAlchemy session used for database access.
+    :param session: The SQLAlchemy Session for database operations.
     :param layer_id: The ID of the layer for which the loss data is being processed.
     :param basis: Specifies the premium basis: either "as_is" or "as_if".
     :param start_year: The starting year for the loss data.
@@ -220,7 +220,7 @@ def get_df_loss_ceded_by_year(
     expected_annual_loss = df_stat_by_year["ceded"].mean()
     log.info("expected_annual_loss", expected_annual_loss=expected_annual_loss)
 
-    df_reinst = get_df_reinst(layer_id, session)
+    df_reinst = get_df_reinst(session, layer_id)
 
     if df_reinst.empty:
         df_loss["reinstated"] = 0
@@ -280,7 +280,7 @@ def get_df_loss(
     """
     Retrieve a DataFrame with the losses for a specific layer, basis and year range.
 
-    :param session: The SQLAlchemy session used for database access.
+    :param session: The SQLAlchemy Session for database operations.
     :param layer_id: The ID of the layer for which the losses are retrieved.
     :param basis: Specifies the loss basis: either "as_is" or "as_if".
     :param start_year: The starting year for the loss selection.

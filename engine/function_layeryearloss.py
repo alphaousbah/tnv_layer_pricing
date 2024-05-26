@@ -12,7 +12,7 @@ log = structlog.get_logger()
 
 
 def get_df_yearloss(
-    analysis_id: int, simulated_years: int, session: Session
+    session: Session, analysis_id: int, simulated_years: int
 ) -> pd.DataFrame:
     analysis = session.get(Analysis, analysis_id)
 
@@ -22,14 +22,14 @@ def get_df_yearloss(
 
     log.info("Processing analysis", analysis_id=analysis_id)
     layeryearlosses = [
-        get_df_layeryearloss(layer.id, simulated_years, session)
+        get_df_layeryearloss(session, layer.id, simulated_years)
         for layer in analysis.layers
     ]
     return pd.concat(layeryearlosses, ignore_index=True)
 
 
 def get_df_layeryearloss(
-    layer_id: int, simulated_years: int, session: Session
+    session: Session, layer_id: int, simulated_years: int
 ) -> pd.DataFrame:
     log.info("Calculating year losses for layer", layer_id=layer_id)
 
@@ -38,7 +38,7 @@ def get_df_layeryearloss(
         log.warning(f"Layer with ID {layer_id} not found.")
         return pd.DataFrame()
 
-    df = get_df_modelyearloss([modelfile.id for modelfile in layer.modelfiles], session)
+    df = get_df_modelyearloss(session, [modelfile.id for modelfile in layer.modelfiles])
     df["layer_id"] = layer_id
 
     # Process recoveries
@@ -48,13 +48,15 @@ def get_df_layeryearloss(
         df["ceded_loss_count"],
         df["cumulative_ceded"],
         df["net"],
-    ) = get_occ_recoveries(
-        df["year"].to_numpy(),
-        df["gross"].to_numpy(),
-        layer.occ_limit,
-        layer.occ_deduct,
-        layer.agg_limit,
-        layer.agg_deduct,
+    ) = njit(
+        get_occ_recoveries(
+            df["year"].to_numpy(),
+            df["gross"].to_numpy(),
+            layer.occ_limit,
+            layer.occ_deduct,
+            layer.agg_limit,
+            layer.agg_deduct,
+        )
     )
 
     # Initialize reinstated and reinst_premium to 0
@@ -65,7 +67,7 @@ def get_df_layeryearloss(
     expected_annual_loss = df_by_year["ceded"].sum() / simulated_years
     log.info("expected_annual_loss", expected_annual_loss=expected_annual_loss)
 
-    df_reinst = get_df_reinst(layer_id, session)
+    df_reinst = get_df_reinst(session, layer_id)
     if not df_reinst.empty:
         (df_reinst["deduct"], df_reinst["limit"]) = get_reinst_limits(
             df_reinst["number"].to_numpy(), layer.agg_limit, layer.occ_limit
@@ -84,14 +86,16 @@ def get_df_layeryearloss(
         )
         log.info("paid_premium", paid_premium=paid_premium)
 
-        (df["reinstated"], df["reinst_premium"]) = get_occ_reinstatements(
-            df["year"].to_numpy(),
-            df["cumulative_ceded"].to_numpy(),
-            layer.occ_limit,
-            df_reinst["rate"].to_numpy(),
-            df_reinst["deduct"].to_numpy(),
-            df_reinst["limit"].to_numpy(),
-            paid_premium,
+        (df["reinstated"], df["reinst_premium"]) = njit(
+            get_occ_reinstatements(
+                df["year"].to_numpy(),
+                df["cumulative_ceded"].to_numpy(),
+                layer.occ_limit,
+                df_reinst["rate"].to_numpy(),
+                df_reinst["deduct"].to_numpy(),
+                df_reinst["limit"].to_numpy(),
+                paid_premium,
+            )
         )
 
     # Finally
@@ -112,7 +116,7 @@ def get_df_layeryearloss(
     return df
 
 
-def get_df_modelyearloss(modelfile_ids: list[int], session: Session) -> pd.DataFrame:
+def get_df_modelyearloss(session: Session, modelfile_ids: list[int]) -> pd.DataFrame:
     query = (
         select(
             ModelYearLoss.year,
@@ -126,12 +130,12 @@ def get_df_modelyearloss(modelfile_ids: list[int], session: Session) -> pd.DataF
     return pd.read_sql_query(query, session.connection())
 
 
-def get_df_reinst(layer_id: int, session: Session) -> pd.DataFrame:
+def get_df_reinst(session: Session, layer_id: int) -> pd.DataFrame:
     """
     Retrieve a DataFrame with detailed reinstatement information for a specific layer.
 
-    :param layer_id: The unique identifier of the layer for which reinstatement details are retrieved.
     :param session: An instance of SQLAlchemy Session to be used for executing the database query.
+    :param layer_id: The unique identifier of the layer for which reinstatement details are retrieved.
     :return: A DataFrame containing selected columns ('order', 'number', 'rate') from the LayerReinstatement table
              for the specified layer, sorted by the 'order' column. The DataFrame is empty if no records are found.
     """
@@ -147,7 +151,6 @@ def get_df_reinst(layer_id: int, session: Session) -> pd.DataFrame:
     return pd.read_sql_query(query, session.connection())
 
 
-@njit
 def get_occ_recoveries(
     year: np.ndarray,
     gross: np.ndarray,
@@ -312,7 +315,6 @@ def get_additional_premiums(
     return additional_premium
 
 
-@njit
 def get_occ_reinstatements(
     year: np.ndarray,
     cumulative_ceded: np.ndarray,
