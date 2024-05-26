@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import sessionmaker
 from win32com import client
 
 from database import (
@@ -71,7 +71,11 @@ df_layer_histolossfile = df_from_listobject(ws_input.ListObjects("layer_histolos
 
 start = perf_counter()
 
-with Session(engine) as session:
+# Create a session to the database
+Session = sessionmaker(engine)
+
+
+with Session.begin() as session:
     analysis = session.get(Analysis, analysis_id)
 
     # Delete the previous relationships between layers and premiumfiles
@@ -98,9 +102,6 @@ with Session(engine) as session:
     for layer in analysis.layers:
         for burningcost in layer.burningcosts:
             session.delete(burningcost)
-
-    # TODO: Delete the commit below
-    # session.commit()
 
     # Calculate the burning cost for the analysis and save the results to the database
     df_burningcost = get_df_burningcost(analysis_id, start_year, end_year, session)
