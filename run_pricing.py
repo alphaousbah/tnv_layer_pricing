@@ -5,10 +5,11 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import sessionmaker
 from win32com import client
 
 from database import (
+    Analysis,
     Layer,
     LayerYearLoss,
     ModelFile,
@@ -18,8 +19,9 @@ from database import (
     ResultLayerStatisticLoss,
     engine,
 )
-from engine.function_layeryearloss import get_df_layeryearloss
-from engine.function_resultlayerstatisticloss import get_df_resultlayerstatisticloss
+from engine.function_layeryearloss import get_df_yearloss
+
+# from engine.function_resultlayerstatisticloss import get_df_resultlayerstatisticloss
 from utils import (
     df_from_listobject,
     read_from_listobject_and_save,
@@ -45,8 +47,9 @@ except IndexError:
 # --------------------------------------
 
 read_from_listobject_and_save(
-    ws_database=wb.Worksheets("Database"),
+    worksheet=wb.Worksheets("Database"),
     listobjects=[
+        "Analysis",
         "Layer",
         "LayerReinstatement",
         "ModelFile",
@@ -55,27 +58,28 @@ read_from_listobject_and_save(
     engine=engine,
 )
 
-
 # --------------------------------------
 # Step 3: Read the input data
 # --------------------------------------
 
-df_layer_modelfile = df_from_listobject(
-    wb.Worksheets("Input").ListObjects("layer_modelfile")
-)
+ws_input = wb.Worksheets("Input")
+
+analysis_id = ws_input.Range("analysis_id").value
+df_layer_modelfile = df_from_listobject(ws_input.ListObjects("layer_modelfile"))
 
 # --------------------------------------
 # Step 4: Process
 # --------------------------------------
 
 start = perf_counter()
-layer_ids = df_layer_modelfile["layer_id"].unique()
 
-with Session(engine) as session:
+Session = sessionmaker(engine)
+
+with Session.begin() as session:
+    analysis = session.get(Analysis, analysis_id)
+
     # Delete the previous relationships between layers and modelfiles
-    # TODO: Correct the code above by retrieving all the analysis layers
-    for layer_id in layer_ids:
-        layer = session.get(Layer, layer_id)
+    for layer in analysis.layers:
         layer.modelfiles.clear()
 
     # Create and save the new relationships between layers and modelfiles
@@ -85,24 +89,21 @@ with Session(engine) as session:
         layer.modelfiles.append(modelfile)
 
     # Calculate and save the layeryearlosses
-    for layer_id in layer_ids:
-        modelfiles_ids = [modelfile.id for modelfile in layer.modelfiles]
-        df_layeryearloss = get_df_layeryearloss(
-            layer_id, modelfiles_ids, SIMULATED_YEARS
-        )
+    df_yearloss = get_df_yearloss(session, analysis_id, SIMULATED_YEARS)
 
-        df_layeryearloss.to_sql(
-            name="layeryearloss",
-            con=engine,
-            if_exists="append",
-            index=False,
-        )
+    df_yearloss.to_sql(
+        name="layeryearloss",
+        con=engine,
+        if_exists="append",
+        index=False,
+    )
 
     # Create and save the resultinstance
     resultinstance = ResultInstance(name="Run 1")
     session.add(resultinstance)
 
     # Create the resultlayers
+    layer_ids = df_layer_modelfile["layer_id"].unique()
     for layer_id in layer_ids:
         layer = session.get(Layer, layer_id)
         resultlayer = ResultLayer(
@@ -127,17 +128,17 @@ with Session(engine) as session:
         for modelfile in layer.modelfiles:
             resultlayer.modelfiles.append(modelfile)
 
-        # Calculate and save the resultlayerstatisticlosses
-        df_resultlayerstatisticloss = get_df_resultlayerstatisticloss(
-            resultlayer.source_id, SIMULATED_YEARS
-        )
-        df_resultlayerstatisticloss.to_sql(
-            name="resultlayerstatisticloss",
-            con=engine,
-            if_exists="append",
-            index=False,
-        )
-    session.commit()
+        # TODO: Correct below
+        # # Calculate and save the resultlayerstatisticlosses
+        # df_resultlayerstatisticloss = get_df_resultlayerstatisticloss(
+        #     resultlayer.source_id, SIMULATED_YEARS
+        # )
+        # df_resultlayerstatisticloss.to_sql(
+        #     name="resultlayerstatisticloss",
+        #     con=engine,
+        #     if_exists="append",
+        #     index=False,
+        # )
 
 end = perf_counter()
 print(f"Calculation time: {end - start}")

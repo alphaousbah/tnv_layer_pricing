@@ -74,7 +74,6 @@ start = perf_counter()
 # Create a session to the database
 Session = sessionmaker(engine)
 
-
 with Session.begin() as session:
     analysis = session.get(Analysis, analysis_id)
 

@@ -15,6 +15,18 @@ log = structlog.get_logger()
 def get_df_yearloss(
     session: Session, analysis_id: int, simulated_years: int
 ) -> pd.DataFrame:
+    """
+    Retrieve the year loss data for a specified analysis and concatenate the results.
+
+    This function fetches the analysis from the database using the provided session and analysis ID.
+    It processes the analysis by retrieving the year loss data for each layer within the analysis
+    over the specified number of simulated years. The results are concatenated into a single DataFrame.
+
+    :param session: SQLAlchemy session for database access.
+    :param analysis_id: The ID of the analysis to retrieve.
+    :param simulated_years: The number of simulated years for the analysis.
+    :return: A DataFrame containing the concatenated year loss data for the analysis.
+    """
     analysis = session.get(Analysis, analysis_id)
 
     if analysis is None:
@@ -32,6 +44,18 @@ def get_df_yearloss(
 def get_df_layeryearloss(
     session: Session, layer_id: int, simulated_years: int
 ) -> pd.DataFrame:
+    """
+    Calculate and return the year loss data for a specified layer over a given number of simulated years.
+
+    This function retrieves the layer from the database using the provided session and layer ID.
+    It calculates the year losses for the layer, processes recoveries, and handles reinstatements.
+    The results are returned in a DataFrame.
+
+    :param session: SQLAlchemy session for database access.
+    :param layer_id: The ID of the layer to retrieve.
+    :param simulated_years: The number of simulated years for the analysis.
+    :return: A DataFrame containing the year loss data for the specified layer.
+    """
     log.info("Calculating year losses for layer", layer_id=layer_id)
 
     layer = session.get(Layer, layer_id)
@@ -114,6 +138,16 @@ def get_df_layeryearloss(
 
 
 def get_df_modelyearloss(session: Session, modelfile_ids: list[int]) -> pd.DataFrame:
+    """
+    Retrieve and return model year loss data for the specified model file IDs.
+
+    This function queries the database for model year loss data corresponding to the given list of model file IDs.
+    The results are ordered by year and day and returned in a DataFrame.
+
+    :param session: SQLAlchemy session for database access.
+    :param modelfile_ids: List of model file IDs to retrieve the year loss data for.
+    :return: A DataFrame containing the model year loss data.
+    """
     query = (
         select(
             ModelYearLoss.year,
@@ -129,12 +163,14 @@ def get_df_modelyearloss(session: Session, modelfile_ids: list[int]) -> pd.DataF
 
 def get_df_reinst(session: Session, layer_id: int) -> pd.DataFrame:
     """
-    Retrieve a DataFrame with detailed reinstatement information for a specific layer.
+    Retrieve and return the reinstatement data for a specified layer.
 
-    :param session: An instance of SQLAlchemy Session to be used for executing the database query.
-    :param layer_id: The unique identifier of the layer for which reinstatement details are retrieved.
-    :return: A DataFrame containing selected columns ('order', 'number', 'rate') from the LayerReinstatement table
-             for the specified layer, sorted by the 'order' column. The DataFrame is empty if no records are found.
+    This function queries the database for reinstatement data corresponding to the given layer ID.
+    The results are ordered by the reinstatement order and returned in a DataFrame.
+
+    :param session: SQLAlchemy session for database access.
+    :param layer_id: The ID of the layer to retrieve the reinstatement data for.
+    :return: A DataFrame containing the reinstatement data for the specified layer.
     """
     query = (
         select(
