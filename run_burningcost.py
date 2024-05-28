@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
-from sqlalchemy.orm import sessionmaker
 from win32com import client
 
 from database import (
@@ -14,7 +13,7 @@ from database import (
     Layer,
     LayerBurningCost,
     PremiumFile,
-    engine,
+    Session,
 )
 from engine.function_burningcost import get_df_burningcost
 from utils import (
@@ -39,19 +38,20 @@ except IndexError:
 # Step 2: Import the existing DB records
 # --------------------------------------
 
-read_from_listobject_and_save(
-    worksheet=wb.Worksheets("Database"),
-    listobjects=[
-        "Analysis",
-        "Layer",
-        "LayerReinstatement",
-        "PremiumFile",
-        "Premium",
-        "HistoLossFile",
-        "HistoLoss",
-    ],
-    engine=engine,
-)
+with Session.begin() as session:
+    read_from_listobject_and_save(
+        session=session,
+        worksheet=wb.Worksheets("Database"),
+        listobjects=[
+            "Analysis",
+            "Layer",
+            "LayerReinstatement",
+            "PremiumFile",
+            "Premium",
+            "HistoLossFile",
+            "HistoLoss",
+        ],
+    )
 
 # --------------------------------------
 # Step 3: Read the input data
@@ -70,9 +70,6 @@ df_layer_histolossfile = df_from_listobject(ws_input.ListObjects("layer_histolos
 # --------------------------------------
 
 start = perf_counter()
-
-# Create a session to the database
-Session = sessionmaker(engine)
 
 with Session.begin() as session:
     analysis = session.get(Analysis, analysis_id)
@@ -117,11 +114,14 @@ with Session.begin() as session:
 
 # Define the output worksheet and table
 ws_output = wb.Worksheets("Output")
-write_df_in_listobjects(
-    DbModels=[LayerBurningCost],
-    ws_output=ws_output,
-    engine=engine,
-)
+
+with Session.begin() as session:
+    write_df_in_listobjects(
+        session=session,
+        DbModels=[LayerBurningCost],
+        ws_output=ws_output,
+    )
+
 ws_output.Select()
 end = perf_counter()
 print(f"Elapsed time: {end - start}")

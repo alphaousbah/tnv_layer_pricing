@@ -144,7 +144,7 @@ def get_df_modelyearloss(session: Session, modelfile_ids: list[int]) -> pd.DataF
     This function queries the database for model year loss data corresponding to the given list of model file IDs.
     The results are ordered by year and day and returned in a DataFrame.
 
-    :param session: SQLAlchemy session for database access.
+    :param session: The SQLAlchemy Session for database operations.
     :param modelfile_ids: List of model file IDs to retrieve the year loss data for.
     :return: A DataFrame containing the model year loss data.
     """
@@ -168,7 +168,7 @@ def get_df_reinst(session: Session, layer_id: int) -> pd.DataFrame:
     This function queries the database for reinstatement data corresponding to the given layer ID.
     The results are ordered by the reinstatement order and returned in a DataFrame.
 
-    :param session: SQLAlchemy session for database access.
+    :param session: The SQLAlchemy Session for database operations.
     :param layer_id: The ID of the layer to retrieve the reinstatement data for.
     :return: A DataFrame containing the reinstatement data for the specified layer.
     """

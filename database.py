@@ -7,6 +7,7 @@ from sqlalchemy.orm import (
     declared_attr,
     mapped_column,
     relationship,
+    sessionmaker,
 )
 
 # --------------------------------------
@@ -403,3 +404,6 @@ engine = create_engine("sqlite://")
 
 # Create the database tables
 Base.metadata.create_all(engine)
+
+# Create a session to the database
+Session = sessionmaker(engine)

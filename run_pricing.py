@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
-from sqlalchemy.orm import sessionmaker
 from win32com import client
 
 from database import (
@@ -17,11 +16,10 @@ from database import (
     ResultLayer,
     ResultLayerReinstatement,
     ResultLayerStatisticLoss,
-    engine,
+    Session,
 )
 from engine.function_layeryearloss import get_df_yearloss
-
-# from engine.function_resultlayerstatisticloss import get_df_resultlayerstatisticloss
+from engine.function_resultlayerstatisticloss import get_df_resultlayerstatisticloss
 from utils import (
     df_from_listobject,
     read_from_listobject_and_save,
@@ -46,17 +44,18 @@ except IndexError:
 # Step 2: Import the existing DB records
 # --------------------------------------
 
-read_from_listobject_and_save(
-    worksheet=wb.Worksheets("Database"),
-    listobjects=[
-        "Analysis",
-        "Layer",
-        "LayerReinstatement",
-        "ModelFile",
-        "ModelYearLoss",
-    ],
-    engine=engine,
-)
+with Session.begin() as session:
+    read_from_listobject_and_save(
+        session=session,
+        worksheet=wb.Worksheets("Database"),
+        listobjects=[
+            "Analysis",
+            "Layer",
+            "LayerReinstatement",
+            "ModelFile",
+            "ModelYearLoss",
+        ],
+    )
 
 # --------------------------------------
 # Step 3: Read the input data
@@ -73,7 +72,6 @@ df_layer_modelfile = df_from_listobject(ws_input.ListObjects("layer_modelfile"))
 
 start = perf_counter()
 
-Session = sessionmaker(engine)
 
 with Session.begin() as session:
     analysis = session.get(Analysis, analysis_id)
@@ -93,7 +91,7 @@ with Session.begin() as session:
 
     df_yearloss.to_sql(
         name="layeryearloss",
-        con=engine,
+        con=session.connection(),
         if_exists="append",
         index=False,
     )
@@ -128,17 +126,16 @@ with Session.begin() as session:
         for modelfile in layer.modelfiles:
             resultlayer.modelfiles.append(modelfile)
 
-        # TODO: Correct below
-        # # Calculate and save the resultlayerstatisticlosses
-        # df_resultlayerstatisticloss = get_df_resultlayerstatisticloss(
-        #     resultlayer.source_id, SIMULATED_YEARS
-        # )
-        # df_resultlayerstatisticloss.to_sql(
-        #     name="resultlayerstatisticloss",
-        #     con=engine,
-        #     if_exists="append",
-        #     index=False,
-        # )
+        # Calculate and save the resultlayerstatisticlosses
+        df_resultlayerstatisticloss = get_df_resultlayerstatisticloss(
+            session, resultlayer.source_id, SIMULATED_YEARS
+        )
+        df_resultlayerstatisticloss.to_sql(
+            name="resultlayerstatisticloss",
+            con=session.connection(),
+            if_exists="append",
+            index=False,
+        )
 
 end = perf_counter()
 print(f"Calculation time: {end - start}")
@@ -149,11 +146,14 @@ print(f"Calculation time: {end - start}")
 
 start = perf_counter()
 ws_output = wb.Worksheets("Output")
-write_df_in_listobjects(
-    DbModels=[LayerYearLoss, ResultLayerStatisticLoss],
-    ws_output=ws_output,
-    engine=engine,
-)
+
+with Session.begin() as session:
+    write_df_in_listobjects(
+        session=session,
+        DbModels=[LayerYearLoss, ResultLayerStatisticLoss],
+        ws_output=ws_output,
+    )
+
 ws_output.Select()
 end = perf_counter()
 print(f"Writing in Excel time: {end - start}")

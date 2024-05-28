@@ -1,5 +1,6 @@
 import pandas as pd
-from sqlalchemy import Engine, select
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 
 def df_from_listobject(listobject: object) -> pd.DataFrame:
@@ -18,7 +19,7 @@ def df_from_listobject(listobject: object) -> pd.DataFrame:
 
 
 def read_from_listobject_and_save(
-    worksheet: object, listobjects: list[object], engine: Engine
+    session: Session, worksheet: object, listobjects: list[object]
 ) -> None:
     """
     Reads data from list objects in a database, processes it, and saves it to an SQL database.
@@ -27,9 +28,9 @@ def read_from_listobject_and_save(
     drops the 'id' column from the DataFrame, and saves the DataFrame to an SQL database using
     the SQLAlchemy engine.
 
+    :param session: The SQLAlchemy Session for database operations.
     :param worksheet: The Excel Worksheet containing the Excel ListObjects.
     :param listobjects: A list of Excel ListObjects to be read from the Worksheet.
-    :param engine: The SQLAlchemy engine to connect to the database.
     :return: None
     """
     for listobject in listobjects:
@@ -38,17 +39,30 @@ def read_from_listobject_and_save(
         # https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_sql.html
         df.to_sql(
             name=str(listobject).lower(),
-            con=engine,
+            con=session.connection(),
             if_exists="append",
             index=False,
         )
     return None
 
 
-def write_df_in_listobjects(DbModels, ws_output, engine):
+def write_df_in_listobjects(
+    session: Session, DbModels: list[object], ws_output: object
+) -> None:
+    """
+    Write data from database models to corresponding ListObjects in an Excel worksheet.
+
+    This function retrieves data from the specified database models, clears the existing data
+    in the corresponding ListObjects in the Excel worksheet, and writes the new data to them.
+
+    :param session: SQLAlchemy session for database access.
+    :param DbModels: List of database model classes to retrieve data from.
+    :param ws_output: Excel worksheet object where data will be written.
+    :return: None
+    """
     for DbModel in DbModels:
         query = select(DbModel)
-        df_output = pd.read_sql(query, engine)
+        df_output = pd.read_sql(query, session.connection())
         table_output = ws_output.ListObjects(DbModel.__name__)
 
         # Clear the output table
