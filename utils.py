@@ -1,9 +1,16 @@
+from typing import Type
+
 import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.sql.selectable import Select
+from win32com.client import CDispatch
+
+from database import Base
 
 
-def df_from_listobject(listobject: object) -> pd.DataFrame:
+def df_from_listobject(listobject: CDispatch) -> pd.DataFrame:
     """
     Converts a ListObject to a pandas DataFrame.
 
@@ -19,7 +26,7 @@ def df_from_listobject(listobject: object) -> pd.DataFrame:
 
 
 def read_from_listobject_and_save(
-    session: Session, worksheet: object, listobjects: list[object]
+    session: Session, worksheet: CDispatch, listobject_names: list[str]
 ) -> None:
     """
     Reads data from list objects in a database, processes it, and saves it to an SQL database.
@@ -30,15 +37,15 @@ def read_from_listobject_and_save(
 
     :param session: The SQLAlchemy Session for database operations.
     :param worksheet: The Excel Worksheet containing the Excel ListObjects.
-    :param listobjects: A list of Excel ListObjects to be read from the Worksheet.
+    :param listobject_names: A list of Excel ListObjects to be read from the Worksheet.
     :return: None
     """
-    for listobject in listobjects:
-        df = df_from_listobject(worksheet.ListObjects(listobject))
+    for listobject_name in listobject_names:
+        df = df_from_listobject(worksheet.ListObjects(listobject_name))
         df = df.drop(columns=["id"])
         # https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_sql.html
         df.to_sql(
-            name=str(listobject).lower(),
+            name=str(listobject_name).lower(),
             con=session.connection(),
             if_exists="append",
             index=False,
@@ -47,7 +54,7 @@ def read_from_listobject_and_save(
 
 
 def write_df_in_listobjects(
-    session: Session, DbModels: list[object], ws_output: object
+    session: Session, DbModels: list[Type[Base]], ws_output: CDispatch
 ) -> None:
     """
     Write data from database models to corresponding ListObjects in an Excel worksheet.
@@ -78,6 +85,15 @@ def write_df_in_listobjects(
         )
         ws_output.Range(cell_start, cell_end).Value = df_output.values
     return None
+
+
+def get_single_result(session: Session, query: Select, item_name: str):
+    try:
+        return session.execute(query).scalar_one()
+    except NoResultFound:
+        raise ValueError(f"{item_name} not found")
+    except MultipleResultsFound:
+        raise ValueError(f"Multiple {item_name} found")
 
 
 """

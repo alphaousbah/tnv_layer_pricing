@@ -1,11 +1,10 @@
-# https://docs.sqlalchemy.org/en/20/orm/quickstart.html
-# https://raaviblog.com/python-2-7-read-and-write-excel-file-with-win32com/
-# https://learn.microsoft.com/en-us/dotnet/api/microsoft.office.interop.excel.listobject?view=excel-pia
 import sys
 from pathlib import Path
 from time import perf_counter
 
-from win32com import client
+import structlog
+from sqlalchemy import select
+from win32com.client import Dispatch
 
 from database import (
     Analysis,
@@ -18,15 +17,18 @@ from database import (
 from engine.function_burningcost import get_df_burningcost
 from utils import (
     df_from_listobject,
+    get_single_result,
     read_from_listobject_and_save,
     write_df_in_listobjects,
 )
+
+log = structlog.get_logger()
 
 # --------------------------------------
 # Step 1: Open the Excel file
 # --------------------------------------
 
-excel = client.Dispatch("Excel.Application")
+excel = Dispatch("Excel.Application")
 
 try:
     wb_path = sys.argv[1]
@@ -42,7 +44,7 @@ with Session.begin() as session:
     read_from_listobject_and_save(
         session=session,
         worksheet=wb.Worksheets("Database"),
-        listobjects=[
+        listobject_names=[
             "Analysis",
             "Layer",
             "LayerReinstatement",
@@ -74,14 +76,24 @@ start = perf_counter()
 with Session.begin() as session:
     analysis = session.get(Analysis, analysis_id)
 
+    if analysis is None:
+        log.error(f"Analysis with id {analysis_id} not found")
+        raise ValueError(f"Analysis with id {analysis_id} not found")
+
     # Delete the previous relationships between layers and premiumfiles
     for layer in analysis.layers:
         layer.premiumfiles.clear()
 
     # Create and save the new relationships between layers and premiumfiles
     for _, row in df_layer_premiumfile.iterrows():
-        layer = session.get(Layer, row["layer_id"])
-        premiumfile = session.get(PremiumFile, row["premiumfile_id"])
+        query_layer = select(Layer).where(Layer.id == row["layer_id"])
+        layer = get_single_result(session, query_layer, "Layer")
+
+        query_premiumfile = select(PremiumFile).where(
+            PremiumFile.id == row["premiumfile_id"]
+        )
+        premiumfile = get_single_result(session, query_premiumfile, "PremiumFile")
+
         layer.premiumfiles.append(premiumfile)
 
     # Delete the previous relationships between layers and histolossfiles
@@ -90,8 +102,14 @@ with Session.begin() as session:
 
     # Create and save the new relationships between layers and histolossfiles
     for _, row in df_layer_histolossfile.iterrows():
-        layer = session.get(Layer, row["layer_id"])
-        histolossfile = session.get(HistoLossFile, row["histolossfile_id"])
+        query_layer = select(Layer).where(Layer.id == row["layer_id"])
+        layer = get_single_result(session, query_layer, "Layer")
+
+        query_histolossfile = select(HistoLossFile).where(
+            HistoLossFile.id == row["histolossfile_id"]
+        )
+        histolossfile = get_single_result(session, query_histolossfile, "HistoLossFile")
+
         layer.histolossfiles.append(histolossfile)
 
     # Delete the previsous burning costs

@@ -162,10 +162,10 @@ def get_df_premium_by_year(
 def get_df_loss_ceded_by_year(
     session: Session, layer_id: int, basis: str, start_year: int, end_year: int
 ) -> pd.DataFrame:
-    """
+    """:param session: The SQLAlchemy Session for database operations.
     Retrieve and process loss data by year for a given layer.
 
-    :param session: The SQLAlchemy Session for database operations.
+
     :param layer_id: The ID of the layer for which the loss data is being processed.
     :param basis: Specifies the premium basis: either "as_is" or "as_if".
     :param start_year: The starting year for the loss data.

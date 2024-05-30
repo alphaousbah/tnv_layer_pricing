@@ -5,7 +5,9 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
-from win32com import client
+import structlog
+from sqlalchemy import select
+from win32com.client import Dispatch
 
 from database import (
     Analysis,
@@ -22,17 +24,19 @@ from engine.function_layeryearloss import get_df_yearloss
 from engine.function_resultlayerstatisticloss import get_df_resultlayerstatisticloss
 from utils import (
     df_from_listobject,
+    get_single_result,
     read_from_listobject_and_save,
     write_df_in_listobjects,
 )
 
+log = structlog.get_logger()
 SIMULATED_YEARS = 100_000
 
 # --------------------------------------
 # Step 1: Open the Excel file
 # --------------------------------------
 
-excel = client.Dispatch("Excel.Application")
+excel = Dispatch("Excel.Application")
 
 try:
     wb_path = sys.argv[1]
@@ -48,7 +52,7 @@ with Session.begin() as session:
     read_from_listobject_and_save(
         session=session,
         worksheet=wb.Worksheets("Database"),
-        listobjects=[
+        listobject_names=[
             "Analysis",
             "Layer",
             "LayerReinstatement",
@@ -76,14 +80,22 @@ start = perf_counter()
 with Session.begin() as session:
     analysis = session.get(Analysis, analysis_id)
 
+    if analysis is None:
+        log.error(f"Analysis with id {analysis_id} not found")
+        raise ValueError(f"Analysis with id {analysis_id} not found")
+
     # Delete the previous relationships between layers and modelfiles
     for layer in analysis.layers:
         layer.modelfiles.clear()
 
     # Create and save the new relationships between layers and modelfiles
     for _, row in df_layer_modelfile.iterrows():
-        layer = session.get(Layer, row["layer_id"])
-        modelfile = session.get(ModelFile, row["modelfile_id"])
+        query_layer = select(Layer).where(Layer.id == row["layer_id"])
+        layer = get_single_result(session, query_layer, "Layer")
+
+        query_modelfile = select(ModelFile).where(ModelFile.id == row["modelfile_id"])
+        modelfile = get_single_result(session, query_modelfile, "ModelFile")
+
         layer.modelfiles.append(modelfile)
 
     # Calculate and save the layeryearlosses
@@ -103,13 +115,15 @@ with Session.begin() as session:
     # Create the resultlayers
     layer_ids = df_layer_modelfile["layer_id"].unique()
     for layer_id in layer_ids:
-        layer = session.get(Layer, layer_id)
+        query_source_layer = select(Layer).where(Layer.id == layer_id)
+        source_layer = get_single_result(session, query_source_layer, "Layer")
+
         resultlayer = ResultLayer(
-            occ_limit=layer.occ_limit,
-            occ_deduct=layer.occ_deduct,
-            agg_limit=layer.agg_limit,
-            agg_deduct=layer.agg_deduct,
-            source_id=layer.id,
+            occ_limit=source_layer.occ_limit,
+            occ_deduct=source_layer.occ_deduct,
+            agg_limit=source_layer.agg_limit,
+            agg_deduct=source_layer.agg_deduct,
+            source_id=source_layer.id,
         )
         resultinstance.layers.append(resultlayer)
 

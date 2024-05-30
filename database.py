@@ -1,6 +1,7 @@
 from typing import Final, List, Optional
 
 from sqlalchemy import Column, ForeignKey, String, Table, create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -21,6 +22,8 @@ class Base(DeclarativeBase):
 
 
 class CommonMixin:
+    engine: Engine
+
     @declared_attr.directive
     def __tablename__(cls) -> str:
         return cls.__name__.lower()
