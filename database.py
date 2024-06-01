@@ -404,6 +404,11 @@ class ResultLayerStatisticLoss(CommonMixin, Base):
     layer: Mapped["ResultLayer"] = relationship(back_populates="percentilelosses")
 
 
+# --------------------------------------
+# Create an  engine and a session
+# --------------------------------------
+
+
 # Create an engine connected to a SQLite database
 engine = create_engine("sqlite://")
 
