@@ -1,7 +1,6 @@
-from typing import Final, List, Optional
+from typing import Final, List, Optional, Protocol
 
 from sqlalchemy import Column, ForeignKey, String, Table, create_engine
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -21,15 +20,18 @@ class Base(DeclarativeBase):
     pass
 
 
-class CommonMixin:
-    engine: Engine
+class HasNameAndID(Protocol):
+    __name__: str
+    id: int
 
+
+class CommonMixin:
     @declared_attr.directive
-    def __tablename__(cls) -> str:
+    def __tablename__(cls: type[HasNameAndID]) -> str:
         return cls.__name__.lower()
 
     # Define a standard representation of an instance
-    def __repr__(self) -> str:
+    def __repr__(self: type[HasNameAndID]) -> str:
         class_name = self.__class__.__name__
         return f"{class_name}(id={self.id!r})"
 
