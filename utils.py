@@ -87,22 +87,21 @@ def write_df_in_listobjects(
     return None
 
 
-def get_single_result(session: Session, query: Select, item_name: str):
+def get_single_result(session: Session, query: Select):
     """
     Execute a query and return a single result, raising an error if not found or multiple results are found.
 
     :param session: The SQLAlchemy session used to execute the query.
     :param query: The SQLAlchemy select query to be executed.
-    :param item_name: The name of the item being queried, used in error messages.
     :return: The single result of the query.
     :raise ValueError: If no result is found or multiple results are found.
     """
     try:
         return session.execute(query).scalar_one()
     except NoResultFound:
-        raise ValueError(f"{item_name} not found")
+        raise ValueError(f"No result for query {query}")
     except MultipleResultsFound:
-        raise ValueError(f"Multiple {item_name} found")
+        raise ValueError(f"Multiple results for query {query}")
 
 
 """

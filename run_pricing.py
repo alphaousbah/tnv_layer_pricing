@@ -91,10 +91,10 @@ with Session.begin() as session:
     # Create and save the new relationships between layers and modelfiles
     for _, row in df_layer_modelfile.iterrows():
         query_layer = select(Layer).where(Layer.id == row["layer_id"])
-        layer = get_single_result(session, query_layer, "Layer")
+        layer = get_single_result(session, query_layer)
 
         query_modelfile = select(ModelFile).where(ModelFile.id == row["modelfile_id"])
-        modelfile = get_single_result(session, query_modelfile, "ModelFile")
+        modelfile = get_single_result(session, query_modelfile)
 
         layer.modelfiles.append(modelfile)
 
@@ -116,7 +116,7 @@ with Session.begin() as session:
     layer_ids = df_layer_modelfile["layer_id"].unique()
     for layer_id in layer_ids:
         query_source_layer = select(Layer).where(Layer.id == layer_id)
-        source_layer = get_single_result(session, query_source_layer, "Layer")
+        source_layer = get_single_result(session, query_source_layer)
 
         resultlayer = ResultLayer(
             occ_limit=source_layer.occ_limit,

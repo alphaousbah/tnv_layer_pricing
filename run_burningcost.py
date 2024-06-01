@@ -87,12 +87,12 @@ with Session.begin() as session:
     # Create and save the new relationships between layers and premiumfiles
     for _, row in df_layer_premiumfile.iterrows():
         query_layer = select(Layer).where(Layer.id == row["layer_id"])
-        layer = get_single_result(session, query_layer, "Layer")
+        layer = get_single_result(session, query_layer)
 
         query_premiumfile = select(PremiumFile).where(
             PremiumFile.id == row["premiumfile_id"]
         )
-        premiumfile = get_single_result(session, query_premiumfile, "PremiumFile")
+        premiumfile = get_single_result(session, query_premiumfile)
 
         layer.premiumfiles.append(premiumfile)
 
@@ -103,12 +103,12 @@ with Session.begin() as session:
     # Create and save the new relationships between layers and histolossfiles
     for _, row in df_layer_histolossfile.iterrows():
         query_layer = select(Layer).where(Layer.id == row["layer_id"])
-        layer = get_single_result(session, query_layer, "Layer")
+        layer = get_single_result(session, query_layer)
 
         query_histolossfile = select(HistoLossFile).where(
             HistoLossFile.id == row["histolossfile_id"]
         )
-        histolossfile = get_single_result(session, query_histolossfile, "HistoLossFile")
+        histolossfile = get_single_result(session, query_histolossfile)
 
         layer.histolossfiles.append(histolossfile)
 
