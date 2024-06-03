@@ -16,7 +16,7 @@ from sqlalchemy.orm import (
 
 
 # Declare the models
-class Base(DeclarativeBase):
+class Base(DeclarativeBase):  # type: ignore[misc]
     pass
 
 
@@ -26,7 +26,7 @@ class HasNameAndID(Protocol):
 
 
 class CommonMixin:
-    @declared_attr.directive
+    @declared_attr.directive  # type: ignore[misc]
     def __tablename__(cls: type[HasNameAndID]) -> str:
         return cls.__name__.lower()
 

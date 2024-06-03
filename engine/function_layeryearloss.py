@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
 import structlog
-
-# from numba import njit
+from numpy.typing import NDArray
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -30,7 +29,7 @@ def get_df_yearloss(
     analysis = session.get(Analysis, analysis_id)
 
     if analysis is None:
-        log.warning("Analysis not found")
+        log.warning(f"Analysis with id {analysis_id} not found.")
         return pd.DataFrame()
 
     log.info("Processing analysis", analysis_id=analysis_id)
@@ -185,13 +184,19 @@ def get_df_reinst(session: Session, layer_id: int) -> pd.DataFrame:
 
 
 def get_occ_recoveries(
-    year: np.ndarray,
-    gross: np.ndarray,
+    year: NDArray[np.int64],
+    gross: NDArray[np.int64],
     occ_limit: int,
     occ_deduct: int,
     agg_limit: int,
     agg_deduct: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+    NDArray[np.int64],
+    NDArray[np.int64],
+    NDArray[np.int64],
+    NDArray[np.int64],
+    NDArray[np.int64],
+]:
     """
     Calculate recovery amounts from loss occurrences under specified limits and deductibles.
 
@@ -260,8 +265,8 @@ def get_occ_recoveries(
 
 
 def get_reinst_limits(
-    reinst_number: np.ndarray, agg_limit: int, occ_limit: int
-) -> tuple[np.ndarray, np.ndarray]:
+    reinst_number: NDArray[np.int64], agg_limit: int, occ_limit: int
+) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
     """
     Calculate the deductible and the remaining reinstatement limit after the aggregate limit.
 
@@ -303,12 +308,12 @@ def get_reinst_limits(
 
 
 def get_additional_premiums(
-    ceded_by_year: np.ndarray,
+    ceded_by_year: NDArray[np.int64],
     occ_limit: int,
-    reinst_rate: np.ndarray,
-    reinst_deduct: np.ndarray,
-    reinst_limit: np.ndarray,
-) -> np.ndarray:
+    reinst_rate: NDArray[np.float64],
+    reinst_deduct: NDArray[np.int64],
+    reinst_limit: NDArray[np.int64],
+) -> NDArray[np.int64]:
     """
     Calculate additional premiums based on ceded amounts, occurrence limits, reinstatement rates,
     deductibles, and limits for each year and each reinstatement.
@@ -349,14 +354,14 @@ def get_additional_premiums(
 
 
 def get_occ_reinstatements(
-    year: np.ndarray,
-    cumulative_ceded: np.ndarray,
+    year: NDArray[np.int64],
+    cumulative_ceded: NDArray[np.int64],
     occ_limit: int,
-    reinst_rate: np.ndarray,
-    reinst_deduct: np.ndarray,
-    reinst_limit: np.ndarray,
+    reinst_rate: NDArray[np.float64],
+    reinst_deduct: NDArray[np.int64],
+    reinst_limit: NDArray[np.int64],
     paid_premium: float,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
     """
     Calculate the reinstated amounts and premiums from cumulative ceded losses under specified reinstatement conditions.
 

@@ -1,13 +1,15 @@
-from typing import Type
+from typing import Type, TypeVar
 
 import pandas as pd
 from sqlalchemy import select
+from sqlalchemy.exc import MultipleResultsFound, NoResultFound
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
-from sqlalchemy.sql.selectable import Select
 from win32com.client import CDispatch
 
 from database import Base
+
+# Create a generic type T indicating that the function can return any type
+T = TypeVar("T")
 
 
 def df_from_listobject(listobject: CDispatch) -> pd.DataFrame:
@@ -29,7 +31,7 @@ def read_from_listobject_and_save(
     session: Session, worksheet: CDispatch, listobject_names: list[str]
 ) -> None:
     """
-    Reads data from list objects in a database, processes it, and saves it to an SQL database.
+    Reads data from Excel list objects in a database, processes it, and saves it to an SQL database.
 
     This function iterates over a list of listobjects, converts each object to a pandas DataFrame,
     drops the 'id' column from the DataFrame, and saves the DataFrame to an SQL database using
@@ -87,17 +89,27 @@ def write_df_in_listobjects(
     return None
 
 
-def get_single_result(session: Session, query: Select):
+def get_single_result(session: Session, DbModel: Type[T], object_id: int) -> T:
     """
-    Execute a query and return a single result, raising an error if not found or multiple results are found.
+    Execute a query to get a single result based on the object_id, raising an error if not found or multiple results are found.
 
     :param session: The SQLAlchemy session used to execute the query.
-    :param query: The SQLAlchemy select query to be executed.
-    :return: The single result of the query.
-    :raise ValueError: If no result is found or multiple results are found.
+    :param DbModel: The SQLAlchemy ORM model to query, which is of type T (Type[T])
+    :param object_id: The ID of the object to query.
+    :return: The single result of the query which is an instance of type T.
+    :raise ValueError: If no result is found, multiple results are found, or the model does not have an 'id' attribute.
     """
+    if not hasattr(DbModel, "id"):
+        raise ValueError(f"Model {DbModel.__name__} doesn't have an 'id' attribute")
+
+    query = select(DbModel).where(DbModel.id == object_id)  # type: ignore[attr-defined]
     try:
-        return session.execute(query).scalar_one()
+        result = session.execute(query).scalar_one()
+        if not isinstance(result, DbModel):
+            raise ValueError(
+                f"Expected instance of {DbModel.__name__}, got {type(result).__name__}"
+            )
+        return result
     except NoResultFound:
         raise ValueError(f"No result for query {query}")
     except MultipleResultsFound:

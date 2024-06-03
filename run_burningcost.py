@@ -3,7 +3,6 @@ from pathlib import Path
 from time import perf_counter
 
 import structlog
-from sqlalchemy import select
 from win32com.client import Dispatch
 
 from database import (
@@ -60,7 +59,6 @@ with Session.begin() as session:
 # --------------------------------------
 
 ws_input = wb.Worksheets("Input")
-
 analysis_id = ws_input.Range("analysis_id").value
 start_year = ws_input.Range("start_year").value
 end_year = ws_input.Range("end_year").value
@@ -86,13 +84,11 @@ with Session.begin() as session:
 
     # Create and save the new relationships between layers and premiumfiles
     for _, row in df_layer_premiumfile.iterrows():
-        query_layer = select(Layer).where(Layer.id == row["layer_id"])
-        layer = get_single_result(session, query_layer)
+        layer_id = int(row["layer_id"])
+        layer = get_single_result(session, Layer, layer_id)
 
-        query_premiumfile = select(PremiumFile).where(
-            PremiumFile.id == row["premiumfile_id"]
-        )
-        premiumfile = get_single_result(session, query_premiumfile)
+        premiumfile_id = int(row["premiumfile_id"])
+        premiumfile = get_single_result(session, PremiumFile, premiumfile_id)
 
         layer.premiumfiles.append(premiumfile)
 
@@ -102,13 +98,11 @@ with Session.begin() as session:
 
     # Create and save the new relationships between layers and histolossfiles
     for _, row in df_layer_histolossfile.iterrows():
-        query_layer = select(Layer).where(Layer.id == row["layer_id"])
-        layer = get_single_result(session, query_layer)
+        layer_id = int(row["layer_id"])
+        layer = get_single_result(session, Layer, layer_id)
 
-        query_histolossfile = select(HistoLossFile).where(
-            HistoLossFile.id == row["histolossfile_id"]
-        )
-        histolossfile = get_single_result(session, query_histolossfile)
+        histolossfile_id = int(row["histolossfile_id"])
+        histolossfile = get_single_result(session, HistoLossFile, histolossfile_id)
 
         layer.histolossfiles.append(histolossfile)
 

@@ -6,7 +6,6 @@ from pathlib import Path
 from time import perf_counter
 
 import structlog
-from sqlalchemy import select
 from win32com.client import Dispatch
 
 from database import (
@@ -66,7 +65,6 @@ with Session.begin() as session:
 # --------------------------------------
 
 ws_input = wb.Worksheets("Input")
-
 analysis_id = ws_input.Range("analysis_id").value
 df_layer_modelfile = df_from_listobject(ws_input.ListObjects("layer_modelfile"))
 
@@ -81,7 +79,7 @@ with Session.begin() as session:
     analysis = session.get(Analysis, analysis_id)
 
     if analysis is None:
-        log.error(f"Analysis with id {analysis_id} not found")
+        log.error(f"Analysis with id {analysis_id} not found.")
         raise ValueError(f"Analysis with id {analysis_id} not found")
 
     # Delete the previous relationships between layers and modelfiles
@@ -90,11 +88,11 @@ with Session.begin() as session:
 
     # Create and save the new relationships between layers and modelfiles
     for _, row in df_layer_modelfile.iterrows():
-        query_layer = select(Layer).where(Layer.id == row["layer_id"])
-        layer = get_single_result(session, query_layer)
+        layer_id = int(row["layer_id"])
+        layer = get_single_result(session, Layer, layer_id)
 
-        query_modelfile = select(ModelFile).where(ModelFile.id == row["modelfile_id"])
-        modelfile = get_single_result(session, query_modelfile)
+        modelfile_id = int(row["modelfile_id"])
+        modelfile: ModelFile = get_single_result(session, ModelFile, modelfile_id)
 
         layer.modelfiles.append(modelfile)
 
@@ -115,8 +113,7 @@ with Session.begin() as session:
     # Create the resultlayers
     layer_ids = df_layer_modelfile["layer_id"].unique()
     for layer_id in layer_ids:
-        query_source_layer = select(Layer).where(Layer.id == layer_id)
-        source_layer = get_single_result(session, query_source_layer)
+        source_layer = get_single_result(session, Layer, layer_id)
 
         resultlayer = ResultLayer(
             occ_limit=source_layer.occ_limit,

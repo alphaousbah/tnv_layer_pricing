@@ -1,13 +1,20 @@
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
+    # Ruff version
     rev: v0.4.4
     hooks:
-      # Run the linter.
+      # Run the linter
       - id: ruff
-      # Run the linter for import sorting.
+      # Run the linter for import sorting
       - id: ruff
         args: ["check", "--select", "I", "--fix"]
-      # Run the formatter.
+      # Run the formatter
       - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0  # You can specify the version of mypy you want to use
+    hooks:
+      # Run the type checker
+      - id: mypy
+        args: ["--strict", "--ignore-missing-imports"]
