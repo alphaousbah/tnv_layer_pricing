@@ -111,9 +111,11 @@ def get_single_result(session: Session, DbModel: Type[T], object_id: int) -> T:
             )
         return result
     except NoResultFound:
-        raise ValueError(f"No result for query {query}")
+        raise ValueError(f"No result found for {DbModel.__name__} with id {object_id}")
     except MultipleResultsFound:
-        raise ValueError(f"Multiple results for query {query}")
+        raise ValueError(
+            f"Multiple results found for {DbModel.__name__} with id {object_id}"
+        )
 
 
 """
